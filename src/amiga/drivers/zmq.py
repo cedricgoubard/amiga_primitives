@@ -1,0 +1,139 @@
+import pickle
+import threading
+from abc import abstractmethod
+from typing import Any, Dict, Optional, Protocol
+import time
+import zmq
+
+DEFAULT_ROBOT_PORT = 6000
+DEFAULT_POLL_FREQUENCY_HZ = 30
+
+
+class ZMQBackendObject(Protocol):
+    @abstractmethod
+    def get_methods(self) -> Dict[str, str]:
+       """Get the methods that can be called on the robot.
+        
+        Example:
+        obj = AMIGA()
+        obj.get_methods() -> {
+            "get_num_dofs": None,
+            "is_freedrive_enabled": None,
+            "servo_joint_positions": ["joint_state"],
+            ...
+            }
+        """
+       raise NotImplementedError()
+
+    def make_zmq_client(
+        self,
+        port: int = DEFAULT_ROBOT_PORT,
+        host: str = "127.0.0.1",
+        async_method: Optional[str] = None,
+    ):
+        methods = self.get_methods()
+        if async_method is not None:
+            assert async_method in methods, (
+                f"Invalid async_method: {async_method}, available: {list(methods.keys())}"
+            )
+            return AsyncZMQClient(port, host, async_method)
+        return SyncZMQClient(port, host, methods)
+
+
+class BaseZMQClient:
+    """Base class for ZMQ clients."""
+
+    def __init__(self, port: int, host: str):
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.REQ)
+        self._socket.connect(f"tcp://{host}:{port}")
+
+
+class SyncZMQClient(BaseZMQClient):
+    """A synchronous ZMQ client."""
+
+    def __init__(self, port: int, host: str, methods: Dict[str, str]):
+        super().__init__(port, host)
+        self._create_methods(methods)
+
+    def _create_methods(self, methods: Dict[str, str]):
+        """Dynamically create synchronous methods."""
+        for name, args in methods.items():
+            setattr(self, name, self._make_sync_method(name, args))
+
+    def _make_sync_method(self, name: str, args: Any):
+        """Create a synchronous method."""
+        def method(**kwargs):
+            request = {"method": name, "args": kwargs}
+            self._socket.send(pickle.dumps(request))
+            return pickle.loads(self._socket.recv())
+
+        return method
+
+
+class AsyncZMQClient(BaseZMQClient):
+    """An asynchronous ZMQ client."""
+
+    def __init__(self, port: int, host: str, async_method: str):
+        super().__init__(port, host)
+        self.async_method = async_method
+        self.latest = None
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.thread = threading.Thread(target=self._reader, daemon=True)
+        self.thread.start()
+        self._create_dynamic_read_method()
+
+    def _reader(self):
+        """Continuously fetch the latest data."""
+        while not self.stop_event.is_set():
+            request = {"method": self.async_method, "args": {}}
+            self._socket.send(pickle.dumps(request))
+            result = pickle.loads(self._socket.recv())
+            with self.lock:
+                self.latest = result
+            time.sleep(1.0 / DEFAULT_POLL_FREQUENCY_HZ)
+
+    def _create_dynamic_read_method(self):
+        """Dynamically creates a read method."""
+        def dynamic_read():
+            with self.lock:
+                return self.latest
+
+        setattr(self, self.async_method, dynamic_read)
+
+    def stop(self):
+        """Stop the background reader thread."""
+        self.stop_event.set()
+        self.thread.join()
+
+
+class ZMQServer:
+    def __init__(self, backend: ZMQBackendObject, host: str, port: int):
+        self._backend = backend
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.REP)
+        self._socket.bind(f"tcp://{host}:{port}")
+        self._stop_event = threading.Event()
+
+    def serve(self):
+        """Serve requests."""
+        self._socket.setsockopt(zmq.RCVTIMEO, 1000)  # Set timeout to 1000 ms
+        while not self._stop_event.is_set():
+            try:
+                message = self._socket.recv()
+                request = pickle.loads(message)
+                method_name = request.get("method")
+                args = request.get("args", {})
+                method = getattr(self._backend, method_name, None)
+                assert method, f"Invalid method: {method_name}"
+                result = method(**args)
+                self._socket.send(pickle.dumps(result))
+            except zmq.Again:
+                continue
+            except Exception as e:
+                self._socket.send(pickle.dumps({"error": str(e)}))
+
+    def stop(self):
+        """Stop serving requests."""
+        self._stop_event.set()

@@ -1,0 +1,13 @@
+zmq:
+  class_name: ZEDCamera
+  host: localhost
+  port: 5556
+  async_client: true
+
+sn: null
+min_depth: 0.3
+max_depth: 5.0
+flip: false
+rgb_res:
+  width: 720
+  height: 720

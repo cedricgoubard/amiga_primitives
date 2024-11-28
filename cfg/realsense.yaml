@@ -1,0 +1,16 @@
+zmq:
+  class_name: RealsenseCamera
+  host: localhost
+  port: 5557
+  async_client: true
+
+sn: 939622072734
+min_depth: 0.1
+max_depth: 2.0
+flip: false
+rgb_res:
+  width: 480
+  height: 480
+d_res:
+  width: 480
+  height: 480

@@ -1,0 +1,19 @@
+FROM primitives-base:latest
+
+########################################################################################
+##################################### Repo #############################################
+########################################################################################
+COPY dockerfiles/requirements.txt /tmp
+RUN pip install -r /tmp/requirements.txt
+
+RUN pip install \
+    pymodbus==3.6.8 \
+    ur-rtde==1.5.7
+
+WORKDIR /amiga
+COPY . .
+RUN pip install -e .
+
+
+
+CMD bash

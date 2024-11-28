@@ -1,0 +1,33 @@
+zmq:
+  host: localhost
+  port: 5555
+  class_name: AMIGA
+  async_client: false
+
+robot_ip: 192.XXX
+use_gripper: true
+gripper_ip: 10.0.2/
+
+cameras:
+  - zed:
+    host: localhost
+    port: 5556
+
+
+named_joint_cfgs:
+  overlook:
+    - np.pi / 2
+    - -np.pi / 2 - np.pi / 3
+    - np.pi / 2 + np.pi / 6
+    - np.pi / 4
+    - np.pi / 2
+    - -2.3562 + np.pi
+    - 0.02  # Gripper
+  home:
+    - np.pi / 2
+    - -np.pi / 2 - np.pi / 4
+    - np.pi / 2 + np.pi / 2.5
+    - -np.pi / 2
+    - np.pi
+    - -2.3562 + np.pi /2
+    - 1.0  # Gripper

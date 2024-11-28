@@ -1,0 +1,12 @@
+
+resources/
+data/
+**/__pycache__/
+
+# img debug
+latest_depth.jpg
+latest_rgb.jpg
+
+# pixi environments
+.pixi
+*.egg-info
