@@ -31,7 +31,8 @@ RUN pip install \
     natsort \
     lightning \
     pandas \
-    rich
+    rich \
+    ultralytics
 
 ########################################################################################
 #################################### PRLLFD ############################################
@@ -39,13 +40,13 @@ RUN pip install \
 COPY dockerfiles/requirements.txt /tmp
 RUN pip install -r /tmp/requirements.txt
 
-WORKDIR /prllfd
+WORKDIR /amiga
 COPY . .
 
 USER root
-RUN chown -R ${USERNAME}:${USERNAME} /prllfd
+RUN chown -R ${USERNAME}:${USERNAME} /amiga
 
 USER ${USERNAME}
-RUN pip install --user -e ./src
+RUN pip install --user -e .
 
 CMD bash

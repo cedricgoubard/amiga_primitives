@@ -20,13 +20,16 @@ build-backend = "hatchling.build"
 
 [tool.pixi.project]
 name = "amiga_primitives"
-channels = ["conda-forge"]
+channels = ["nvidia", "pytorch", "conda-forge"]
 platforms = ["linux-64"]
 
 [tool.pixi.pypi-dependencies]
 amiga = { path = ".", editable = true }
+ultralytics = ">=8.3.38,<9"
+lapx = ">=0.5.11,<0.6"
 
 [tool.pixi.tasks]
+test = "pytest --cov src/amiga src/tests/"
 
 [tool.pixi.dependencies]
 pyzmq = ">=26.2.0,<27"
@@ -35,3 +38,9 @@ omegaconf = ">=2.3.0,<3"
 einops = ">=0.8.0,<0.9"
 jaxtyping = ">=0.2.36,<0.3"
 pymodbus = ">=3.7.4,<4"
+pytorch = { version = ">=2.5.1,<3", channel = "pytorch" }
+torchvision = { version = ">=0.20.1,<0.21", channel = "pytorch" }
+torchaudio = { version = ">=2.5.1,<3", channel = "pytorch" }
+pytorch-cuda = { version = "11.8.*", channel = "pytorch" }
+pytest = ">=8.3.3,<9"
+pytest-cov = ">=6.0.0,<7"

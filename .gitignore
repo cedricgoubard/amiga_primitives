@@ -2,6 +2,9 @@
 resources/
 data/
 **/__pycache__/
+.coverage
+.pytest_cache/
+*.jpg
 
 # img debug
 latest_depth.jpg

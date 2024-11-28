@@ -247,12 +247,6 @@ class ZEDCamera(CameraDriver):
 
         return image, depth
 
-    def close(self):
-        self._zed.close()
-
-    def __del__(self):
-        self.close()
-
 
 class RealsenseCamera(CameraDriver):
     def __repr__(self) -> str:
