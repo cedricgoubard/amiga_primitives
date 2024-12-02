@@ -36,7 +36,7 @@ class ZMQBackendObject(Protocol):
             assert async_method in methods, (
                 f"Invalid async_method: {async_method}, available: {list(methods.keys())}"
             )
-            return AsyncZMQClient(port, host, async_method)
+            return AsyncZMQClient(port, host, async_method, methods)
         return SyncZMQClient(port, host, methods)
 
 
@@ -59,11 +59,12 @@ class SyncZMQClient(BaseZMQClient):
     def _create_methods(self, methods: Dict[str, str]):
         """Dynamically create synchronous methods."""
         for name, args in methods.items():
-            setattr(self, name, self._make_sync_method(name, args))
+            setattr(self, name, self._make_sync_method(name))
 
-    def _make_sync_method(self, name: str, args: Any):
+    def _make_sync_method(self, name: str):
         """Create a synchronous method."""
         def method(**kwargs):
+            print(f"Calling method: {name} with args: {kwargs}")
             request = {"method": name, "args": kwargs}
             self._socket.send(pickle.dumps(request))
             return pickle.loads(self._socket.recv())
@@ -71,11 +72,16 @@ class SyncZMQClient(BaseZMQClient):
         return method
 
 
-class AsyncZMQClient(BaseZMQClient):
-    """An asynchronous ZMQ client."""
+class AsyncZMQClient(SyncZMQClient):
+    """Same as SyncZMQClient, but one of the methods will be called at a fixed frequency in the background
+    and return the latest result when called to reduce latency.
+    All other methods are made available as synchronous methods.
+    """
 
-    def __init__(self, port: int, host: str, async_method: str):
-        super().__init__(port, host)
+    def __init__(self, port: int, host: str, async_method: str, methods: Dict[str, str] = None):
+        methods = {k: v for k, v in methods.items() if k != async_method}
+        super().__init__(port, host, methods=methods)
+        
         self.async_method = async_method
         self.latest = None
         self.lock = threading.Lock()
@@ -132,6 +138,7 @@ class ZMQServer:
             except zmq.Again:
                 continue
             except Exception as e:
+                print(f"ERROR: {e}")
                 self._socket.send(pickle.dumps({"error": str(e)}))
 
     def stop(self):

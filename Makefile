@@ -23,7 +23,7 @@ run-amiga-listener:
 			--ulimit rtprio=98 \
 			--ulimit memlock=-1 \
 			--ulimit rttime=-1 \
-			${project-name}-amiga:latest bash -c "pip install --root-user-action -e . && python -m amiga --zmq --cfg cfg/amiga.yaml"
+			${project-name}-amiga:latest bash -c "pip install -e . && python -m amiga --zmq --cfg cfg/amiga.yaml"
 
 
 run-zed:
@@ -55,6 +55,21 @@ run-zed-obj-det:
 		--user ${UID}:${GID} \
 		-it \
 		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.detect_objects --cfg cfg/zed.yaml --weights resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt"
+
+
+
+run-dev:
+	@docker run \
+		--runtime=nvidia \
+		--rm \
+		--privileged \
+		--name ${project-name}-dev \
+		--net=host \
+		-v ${current_dir}:/amiga \
+		--user ${UID}:${GID} \
+		-it \
+		${project-name}-torch bash -c "pip install -e . && python -m amiga --script --cfg cfg/scripts/dev.yaml"
+
 
 
 run-realsense:

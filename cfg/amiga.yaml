@@ -4,9 +4,9 @@ zmq:
   class_name: AMIGA
   async_client: false
 
-robot_ip: 192.XXX
+robot_ip: 192.168.37.11
 use_gripper: true
-gripper_ip: 10.0.2/
+gripper_ip: 10.0.4.12
 
 cameras:
   - zed:

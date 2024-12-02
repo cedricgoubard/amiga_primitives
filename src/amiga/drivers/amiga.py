@@ -11,8 +11,10 @@ class AMIGA(ZMQBackendObject):
     """A class representing a AMIGA."""
 
     def __init__(self, cfg: OmegaConf):
-        self._check_required_libraries()  
-        self._check_cfg(cfg)
+        if not self._check_required_libraries() or not self._check_cfg(cfg):
+             # This class might be instantiated by a client, just to know its methods; so no error here
+            return
+        
         self.cfg = cfg
         import rtde_control
         import rtde_receive
@@ -37,51 +39,35 @@ class AMIGA(ZMQBackendObject):
         self._free_drive = False
         self.robot.endFreedriveMode()
         self._use_gripper = cfg.use_gripper
+        self.named_configs = {}
 
         self._load_named_joint_cfgs()
 
-    def _check_required_libraries(self):
+    def _check_required_libraries(self) -> bool:
+        ready = True
         try:
             import rtde_control
             import rtde_receive
         except ImportError:
-            raise ImportError(
-                "ur_rtde is required to use the AMIGA wrapper."
-            )
+            ready = False
+        return ready
 
-    def _check_cfg(self, cfg):
+    def _check_cfg(self, cfg) -> bool:
         req_keys = ["robot_ip", "gripper_ip", "use_gripper"]
         missing_keys = [key for key in req_keys if key not in cfg]
-        assert not missing_keys, f"Missing keys in config: {missing_keys}"
+        return len(missing_keys) == 0
 
     def _load_named_joint_cfgs(self):
         """Load the named joint configurations from config file."""
         for name, joints in self.cfg.named_joint_cfgs.items():
-            self.named_configs[name] = np.array([eval(x) for x in joints])
+            js = []
+            for j in joints:
+                if isinstance(j, str): js.append(eval(j))
+                elif isinstance(j, float): js.append(j)
+                else: raise ValueError(f"Invalid joint value: {j}")
+            
+            self.named_configs[name] = np.array(js)
             print(f"Loaded config {name}")
-
-        self.named_configs = {
-            "overlook": np.array(
-                [
-                    np.pi / 2,
-                    -np.pi / 2 - np.pi / 3,
-                    np.pi / 2 + np.pi / 6,
-                    np.pi / 4,
-                    np.pi / 2,
-                    -2.3562 + np.pi,
-                    0.02,  # Gripper
-                ]),
-            "home": np.array(
-            [
-                np.pi / 2,
-                -np.pi / 2 - np.pi / 4,
-                np.pi / 2 + np.pi / 2.5,
-                -np.pi / 2,
-                np.pi,
-                -2.3562 + np.pi /2,
-                1.0,  # Gripper
-            ])
-        }
 
     def get_named_joints_cfg(self, name: str) -> np.ndarray:
         """Get the named joint configuration."""
@@ -154,6 +140,21 @@ class AMIGA(ZMQBackendObject):
         joint_velocities = np.append(joint_velocities, np.array([0]))
 
         return joint_velocities
+
+    def go_to_joint_positions(self, joint_positions: np.ndarray, wait: bool = False) -> None:
+        """Command the leader robot to a given state.
+
+        Args:
+            joint_state (np.ndarray): The state to command the leader robot to.
+        """
+        if self._use_gripper:
+            self.robot.moveJ(joint_positions[:6], asynchronous=wait)
+            gripper_pos = joint_positions[-1] * 255
+            self.gripper.move(gripper_pos, 255, 10)
+        else:
+            self.robot.moveJ(joint_positions, asynchronous=wait)
+        
+        return True
 
     def servo_joint_positions(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.
@@ -242,10 +243,11 @@ class AMIGA(ZMQBackendObject):
         # TODO: use a decorator to generate this automatically
         return {
             "get_num_dofs": None,
-            "get_named_joints_cfg": None,
+            "get_named_joints_cfg": ["name"],
             "get_observation": None,
             "is_freedrive_enabled": None,
             "set_freedrive_mode": ["enable"],
             "servo_joint_positions": ["joint_state"],
             "servo_eef_pose_and_gripper": ["pose_and_gripper_angle"],
+            "go_to_joint_positions": ["joint_positions", "wait"],
         }

@@ -1,0 +1,15 @@
+script_name: Dev
+
+robot_zmq:
+  host: localhost
+  port: 5555
+  class_name: AMIGA
+  async_client: false
+
+cam_zmq:
+  host: localhost
+  port: 5556
+  class_name: ZEDCamera
+  async_client: true
+
+yolo_weights: resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt

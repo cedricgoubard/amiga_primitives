@@ -93,6 +93,21 @@ def get_d4X5_resolution_depth(h: int, w: int):
     return available_resolutions[-1]
 
 
+class CameraParameters(object):
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    k1: float
+    k2: float
+    p1: float
+    p2: float
+    k3: float
+
+    def __str__(self) -> str:
+        return f"CamParams(fx={self.fx}, fy={self.fy}, cx={self.cx}, cy={self.cy}, k1={self.k1}, k2={self.k2}, p1={self.p1}, p2={self.p2}, k3={self.k3})"
+
+
 class CameraDriver(ZMQBackendObject):
     """Camera protocol.
 
@@ -160,9 +175,31 @@ class CameraDriver(ZMQBackendObject):
 
         return image, depth
 
+    @abstractmethod
+    def get_parameters(self) -> CameraParameters:
+        """Get the camera parameters.
+
+        Returns:
+            CameraParameters: The camera parameters.
+        """
+        raise NotImplementedError()
+
+    def uvdepth_to_xyz(self, u: int, v: int, depth: float) -> Tuple[float, float, float]:
+        """u, v are pixel coordinates, depth is in mm. Result coords should be in meters."""
+        params = self.get_parameters()
+        fx, fy, cx, cy = params.fx, params.fy, params.cx, params.cy
+
+        x = (u - cx) * depth / fx
+        y = (v - cy) * depth / fy
+        z = depth
+
+        return x / 1000, y / 1000, z / 1000
+
     def get_methods(self) -> Dict[str, str]:
         return {
-            "read": ["img_size"]
+            "read": ["img_size"],
+            "get_parameters": [],
+            "uvdepth_to_xyz": ["u", "v", "depth"]
         }
 
 
@@ -218,7 +255,24 @@ class ZEDCamera(CameraDriver):
         if not success:
             self._zed.close()
             raise RuntimeError("Failed to open ZED camera.")
-                
+
+    def get_parameters(self) -> CameraParameters:
+        import pyzed.sl as sl
+
+        cam_params = self._zed.get_camera_information().camera_configuration.calibration_parameters
+        params = CameraParameters()
+        params.fx = cam_params.left_cam.fx
+        params.fy = cam_params.left_cam.fy
+        params.cx = cam_params.left_cam.cx
+        params.cy = cam_params.left_cam.cy
+        params.k1 = cam_params.left_cam.disto[0]
+        params.k2 = cam_params.left_cam.disto[1]
+        params.p1 = cam_params.left_cam.disto[2]
+        params.p2 = cam_params.left_cam.disto[3]
+        params.k3 = cam_params.left_cam.disto[4]
+
+        return params
+
     def read(
         self,
         img_size: Optional[Tuple[int, int]] = None
