@@ -12,7 +12,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["ur-rtde>=1.5.9,<2", "opencv-python>=4.10.0.84,<5"]
+dependencies = ["ur-rtde>=1.5.9,<2", "opencv-python>=4.10.0.84,<5", "opencv-contrib-python>=4.10.0.84,<5", "transforms3d"]
 
 [build-system]
 requires = ["hatchling"]

@@ -63,11 +63,25 @@ class SyncZMQClient(BaseZMQClient):
 
     def _make_sync_method(self, name: str):
         """Create a synchronous method."""
-        def method(**kwargs):
-            print(f"Calling method: {name} with args: {kwargs}")
-            request = {"method": name, "args": kwargs}
-            self._socket.send(pickle.dumps(request))
-            return pickle.loads(self._socket.recv())
+        def method(*args, **kwargs):
+            if len(args) > 0:
+                raise ValueError(f"Positional arguments are not supported: {args}. Use kwargs instead.")
+            if hasattr(self, "socket_lock"):
+                with self.socket_lock:
+                    request = {"method": name, "args": kwargs}
+                    self._socket.send(pickle.dumps(request))
+                    res = pickle.loads(self._socket.recv())
+                    if isinstance(res, dict) and "error" in res:
+                        print(f"Error: {res['error']}")
+                    return res
+            else:
+                request = {"method": name, "args": kwargs}
+                self._socket.send(pickle.dumps(request))
+                res = pickle.loads(self._socket.recv())
+                if isinstance(res, dict) and "error" in res:
+                    print(f"Error: {res['error']}")
+                return res
+                
 
         return method
 
@@ -84,7 +98,8 @@ class AsyncZMQClient(SyncZMQClient):
         
         self.async_method = async_method
         self.latest = None
-        self.lock = threading.Lock()
+        self.latest_lock = threading.Lock()
+        self.socket_lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self._reader, daemon=True)
         self.thread.start()
@@ -94,16 +109,17 @@ class AsyncZMQClient(SyncZMQClient):
         """Continuously fetch the latest data."""
         while not self.stop_event.is_set():
             request = {"method": self.async_method, "args": {}}
-            self._socket.send(pickle.dumps(request))
-            result = pickle.loads(self._socket.recv())
-            with self.lock:
+            with self.socket_lock:
+                self._socket.send(pickle.dumps(request))
+                result = pickle.loads(self._socket.recv())
+            with self.latest_lock:
                 self.latest = result
             time.sleep(1.0 / DEFAULT_POLL_FREQUENCY_HZ)
 
     def _create_dynamic_read_method(self):
         """Dynamically creates a read method."""
         def dynamic_read():
-            with self.lock:
+            with self.latest_lock:
                 return self.latest
 
         setattr(self, self.async_method, dynamic_read)

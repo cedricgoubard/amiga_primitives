@@ -56,8 +56,6 @@ run-zed-obj-det:
 		-it \
 		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.detect_objects --cfg cfg/zed.yaml --weights resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt"
 
-
-
 run-dev:
 	@docker run \
 		--runtime=nvidia \
@@ -68,9 +66,7 @@ run-dev:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga --script --cfg cfg/scripts/dev.yaml"
-
-
+		${project-name}-torch bash -c "pip install transforms3d && pip install -e . && python -m amiga --script --cfg cfg/scripts/dev.yaml"
 
 run-realsense:
 	@docker run \
@@ -86,6 +82,20 @@ run-realsense:
 		-e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
 		-it \
 		${project-name}-rs:latest bash -c "pip install -e . && python -m amiga --zmq --cfg cfg/realsense.yaml"
+
+
+run-handeye:
+	@docker run \
+		--runtime=nvidia \
+		--rm \
+		--privileged \
+		--name ${project-name}-handeye \
+		--net=host \
+		-v ${current_dir}:/amiga \
+		--user ${UID}:${GID} \
+		-it \
+		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml"
+
 
 stop:
 	@docker stop ${project-name}-zed 2> /dev/null || true

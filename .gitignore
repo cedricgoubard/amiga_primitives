@@ -5,6 +5,7 @@ data/
 .coverage
 .pytest_cache/
 *.jpg
+hand_eye_samples.json
 
 # img debug
 latest_depth.jpg
