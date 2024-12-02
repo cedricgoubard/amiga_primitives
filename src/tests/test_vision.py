@@ -57,9 +57,24 @@ class TestKitchenObjectDetector(unittest.TestCase):
         mock_load_model.return_value = self.mock_model
 
         # Mock YOLO model behavior
-        self.mock_model.track.return_value.boxes = [
-            MagicMock(id=torch.from_numpy(np.array([1])), xywh=torch.from_numpy(np.array([[50, 50, 20, 20]]))),
-            MagicMock(id=torch.from_numpy(np.array([2])), xywh=torch.from_numpy(np.array([[100, 100, 30, 30]]))),
+        self.mock_model.names = {0: "apple", 1: "banana"}
+        self.mock_model.track.return_value = [
+            MagicMock(
+                boxes=[
+                    MagicMock(
+                        id=torch.from_numpy(np.array([1])), 
+                        xywh=torch.from_numpy(np.array([[50, 50, 20, 20]])), 
+                        cls=torch.from_numpy(np.array([0])), 
+                        conf=torch.from_numpy(np.array([0.88]))
+                    ),
+                    MagicMock(
+                        id=torch.from_numpy(np.array([2])), 
+                        xywh=torch.from_numpy(np.array([[100, 100, 30, 30]])), 
+                        cls=torch.from_numpy(np.array([1])), 
+                        conf=torch.from_numpy(np.array([0.92]))
+                    )
+                ]
+            )
         ]
 
         self.detector = av.KitchenObjectDetector(mdl_path="mock_model_path", time_buffer_sec=0.5)
@@ -70,7 +85,6 @@ class TestKitchenObjectDetector(unittest.TestCase):
 
         # Call the detector
         results = self.detector(img)
-        
         # Verify detected objects
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["id"], 1)
@@ -89,7 +103,7 @@ class TestKitchenObjectDetector(unittest.TestCase):
             self.detector(img)
 
         # Mock an empty model output to simulate a frame without detections
-        self.mock_model.track.return_value.boxes = []
+        self.mock_model.track.return_value = [ MagicMock(boxes=[]) ]
 
         # Call again after less than the time buffer duration
         with patch("datetime.datetime") as mock_dt:
@@ -113,7 +127,7 @@ class TestKitchenObjectDetector(unittest.TestCase):
             self.detector(img)
 
         # Mock an empty model output to simulate a frame without detections
-        self.mock_model.track.return_value.boxes = []
+        self.mock_model.track.return_value = [ MagicMock(boxes=[]) ]
 
         # Call again after more than the time buffer duration
         with patch("datetime.datetime") as mock_dt:
@@ -135,7 +149,7 @@ class TestKitchenObjectDetector(unittest.TestCase):
         img = np.random.randint(10, 256, size=(200, 200, 3), dtype=np.uint8)
 
         # Mock an empty detection result
-        self.mock_model.track.return_value.boxes = []
+        self.mock_model.track.return_value = [ MagicMock(boxes=[]) ]
 
         results = self.detector(img)
 

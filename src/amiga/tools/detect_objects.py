@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 import numpy as np
 
 from amiga.drivers.cameras import ZEDCamera, RealsenseCamera  # DO NOT REMOVE
-from amiga.vision import KitchenObjectDetector
+from amiga.vision import KitchenObjectDetector, overlay_results
 
 
 if __name__ == "__main__":
@@ -40,6 +40,13 @@ if __name__ == "__main__":
     while True:
         rgb, _ = client.read()
         cv2.imwrite(f"latest_rgb.jpg", cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
+        t0 = time.time()
         res = mdl(rgb)
-        print(res)
+        t1 = time.time()
+        # Model based on YOLOv11s -> 10-20ms per frame on RTX 3080 (amigo laptop)
+        print(f"Time taken: {int((t1 - t0)*1000)}ms; results: {res}")
+
+        # Overlay results
+        rgb = overlay_results(rgb, res)
+        cv2.imwrite(f"latest_objects.jpg", cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
         time.sleep(1 / rate)
