@@ -375,6 +375,10 @@ class AMIGA(ZMQBackendObject):
         if self._use_gripper:
             self.gripper.close()
 
+    def open_gripper(self):
+        if self._use_gripper:
+            self.gripper.open()
+
     def get_methods(self):
         """This is used to dynamically generate the methods for the ZMQ server."""
         # TODO: use a decorator to generate this automatically
@@ -390,5 +394,6 @@ class AMIGA(ZMQBackendObject):
             "go_to_eef_pose": ["eef_pose", "gripper_position", "wait"],
             "go_to_eef_position_default_orientation": ["eef_position", "gripper_position", "wait"],
             "close_gripper": None,
+            "open_gripper": None,
             "get_camera_tf": None,
         }

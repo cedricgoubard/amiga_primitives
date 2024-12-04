@@ -94,7 +94,31 @@ run-handeye:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml"
+		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml
+
+.robot_tool:
+	@docker run \
+		--runtime=nvidia \
+		--rm \
+		--privileged \
+		--name ${project-name}-gripper \
+		--net=host \
+		-v ${current_dir}:/amiga \
+		--user ${UID}:${GID} \
+		-it \
+		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
+
+open-gripper: rob_flag=--open
+open-gripper: .robot_tool
+
+close-gripper: rob_flag=--close
+close-gripper: .robot_tool
+
+freeddrive-on: rob_flag=--freedrive
+freeddrive-on: .robot_tool
+
+freeddrive-off: rob_flag=--no-freedrive
+freeddrive-off: .robot_tool
 
 
 stop:
