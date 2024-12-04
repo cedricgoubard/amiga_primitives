@@ -120,6 +120,9 @@ freeddrive-on: .robot_tool
 freeddrive-off: rob_flag=--no-freedrive
 freeddrive-off: .robot_tool
 
+home: rob_flag=--home
+home: .robot_tool
+
 
 stop:
 	@docker stop ${project-name}-zed 2> /dev/null || true

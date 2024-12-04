@@ -17,6 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("--open", action="store_true", help="Open the gripper")
     parser.add_argument("--close", action="store_true", help="Close the gripper")
     parser.add_argument("--freedrive", action=argparse.BooleanOptionalAction, help="Set freedrive mode")
+    parser.add_argument("--home", action="store_true", help="Go to home")
 
 
     args = parser.parse_args()
@@ -31,8 +32,11 @@ if __name__ == "__main__":
         robot.open_gripper()
     elif args.close:
         robot.close_gripper()
-    elif "freedrive" in args:
+    elif args.freedrive is not None:
         robot.set_freedrive_mode(enable=args.freedrive)
+    elif args.home:
+        q = robot.get_named_joints_cfg(name="home")
+        robot.go_to_joint_positions(joint_positions=q, wait=True)
     else:
         raise ValueError("No action specified")
 
