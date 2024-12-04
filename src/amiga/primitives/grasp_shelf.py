@@ -1,10 +1,11 @@
 import numpy as np
-
+import cv2
 import transforms3d as t3d
 
 from amiga.vision import KitchenObjectDetector, overlay_results
 from amiga.drivers.cameras import ZEDCamera , CameraDriver, CameraParameters # DO NOT REMOVE, used at eval
 from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
+from amiga.vision import overlay_results
 
 def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: CameraDriver, robot: AMIGA):
     q = robot.get_named_joints_cfg(name="overlook")
@@ -14,14 +15,24 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
 
     rgb, depth = camera.read()
     objs = detector(rgb)
+    cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    depth = np.clip(depth, 0, 3000)
+    cv2.imwrite("latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8))
+    if len(objs) > 0: cv2.imwrite("latest_objects.jpg", overlay_results(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), objs))
+
     olive_oil = [obj for obj in objs if obj["class_name"] == "olive-oil-bottle"]
     if len(olive_oil) == 0: raise ValueError("No olive oil bottle detected")
     print(f"Olive oil bottle detected: {olive_oil}")
 
     x, y, w, h = olive_oil[0]["xywh"]
     w, h = 0.9*w, 0.9*h  # make sure we get mostly the object
+    print(f"Object bounding box: {x, y, w, h}")
+    rgb[int(y-h/2):int(y+h/2),int(x-w/2):int(x+w/2)] = [255, 0, 0]  # Draw a red box around the object
+    cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    
     depth_box = depth[int(y - h / 2):int(y + h / 2), int(x - w / 2):int(x + w / 2)]
     obj_depth = np.median(depth_box)
+    print(f"Object depth: {obj_depth}")
 
     # Pixel space to 3D position in camera frame
     obj_cam_coords = camera.uvdepth_to_xyz(u=int(x), v=int(y), depth=obj_depth)
@@ -36,10 +47,10 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
         )
     print(f"TF matrix BL -> EEF: \n{bl_to_eef_tf}")  # x forward, y left, z up
     
-    # cam_pose = np.array([0.091, 0.088, 0.03, -0.025, -1.315, -2.356])  # X Y Z rX rY rZ
+    eef_cam_trans, eef_cam_rot_mx = robot.get_camera_tf()
     eef_to_cam_tf = t3d.affines.compose(
-        T=np.array([0.091, 0.088, 0.03]),
-        R=t3d.euler.euler2mat(0, 0, 3 * np.pi / 4, axes='sxyz'),
+        T=eef_cam_trans,
+        R=eef_cam_rot_mx,
         Z=np.array([1, 1, 1])
         )
     print(f"TF matrix EEF -> CAM: \n{eef_to_cam_tf}")  # x forward, y left, z up
@@ -54,9 +65,10 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
     obj_bl_coords = obj_bl_coords_h[:3]  # Extract x, y, z from homogeneous coordinates
     print(f"Object coordinates in base_link frame: {obj_bl_coords}")
 
-    # angles = [np.pi/2, -np.pi/4, 0.0]
-    # robot.go_to_eef_pose(eef_pose=np.array([0.2, -0.6, 0.6, angles[0], angles[1], angles[2]]), gripper_position=1.0)
-    # print(robot.get_observation()["ee_pose_euler"])
+    obj_bl_coords[1] += 0.25  # 25cm offset in y (backwards)
+    obj_bl_coords[2] += 0.05  # 5cm offset in z (upwards)
+    # obj_bl_coords = np.array([0.0, -0.3, 0.8])
+    print(f"Moving to object coordinates: {obj_bl_coords}")
 
-
+    robot.go_to_eef_position_default_orientation(eef_position=obj_bl_coords)
 

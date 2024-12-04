@@ -177,6 +177,16 @@ class AMIGA(ZMQBackendObject):
             return 7
         return 6
 
+    def get_camera_tf(self) -> Tuple[np.ndarray, np.ndarray]:
+        return (
+            np.array([0.14900713, 0.06125623, 0.01208498]),
+            np.array([
+                [-0.64635911, -0.69014093, -0.32546181],
+                [ 0.76197034, -0.6063051,  -0.22758585],
+                [-0.04026285, -0.39509444,  0.91775775]
+                ])
+        )
+
     def _get_eef_speed(self) -> np.ndarray:
         speed = self.r_inter.getActualTCPSpeed()
         # print("Speed: ", [round(s, 1) for s in speed])
@@ -270,14 +280,14 @@ class AMIGA(ZMQBackendObject):
         
         default_rpy = [np.pi/2, -np.pi/4, 0.0]  # Gripper facing forward
         eef_pose = np.append(eef_position, rpy2rv(*default_rpy))
-
+        print("EEF pose: ", eef_pose)
         if self._use_gripper:
-            self.robot.moveL(pose=eef_pose[:6], asynchronous=(not wait))
+            self.robot.moveJ_IK(pose=eef_pose[:6], asynchronous=(not wait))
             if gripper_position is not None:
                 gripper_pos = gripper_position * 255
                 self.gripper.move(gripper_pos, 255, 10)
         else:
-            self.robot.moveL(eef_pose, asynchronous=(not wait))
+            self.robot.moveJ_IK(eef_pose, asynchronous=(not wait))
         
     def servo_joint_positions(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.
@@ -380,4 +390,5 @@ class AMIGA(ZMQBackendObject):
             "go_to_eef_pose": ["eef_pose", "gripper_position", "wait"],
             "go_to_eef_position_default_orientation": ["eef_position", "gripper_position", "wait"],
             "close_gripper": None,
+            "get_camera_tf": None,
         }

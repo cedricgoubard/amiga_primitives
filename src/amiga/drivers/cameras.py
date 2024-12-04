@@ -29,7 +29,7 @@ def check_realsense_required_libraries() -> bool:
 
 
 def get_zed_resolution(h: int, w: int):
-    check_zed_required_libraries()
+    assert check_zed_required_libraries(), "ZED libraries not found."
     import pyzed.sl as sl
     #             width*height
     # | HD2K    | 2208*1242 (x2) \n Available FPS: 15 |
@@ -48,6 +48,23 @@ def get_zed_resolution(h: int, w: int):
         return sl.RESOLUTION.HD1200
     else:
         return sl.RESOLUTION.HD2K
+    
+def get_zed_wh_from_resolution(res) -> Tuple[int, int]:
+    assert check_zed_required_libraries(), "ZED libraries not found."
+    import pyzed.sl as sl
+
+    if res == sl.RESOLUTION.VGA:
+        return (672, 376)
+    elif res == sl.RESOLUTION.HD720:
+        return (1280, 720)
+    elif res == sl.RESOLUTION.HD1080:
+        return (1920, 1080)
+    elif res == sl.RESOLUTION.HD1200:
+        return (1920, 1200)
+    elif res == sl.RESOLUTION.HD2K:
+        return (2208, 1242)
+    else:
+        raise ValueError("Invalid resolution")
 
 
 def get_device_ids() -> List[str]:
@@ -137,7 +154,6 @@ class CameraDriver(ZMQBackendObject):
             self, 
             colour_image: Int[np.ndarray, "H W 3"], 
             depth_image: Float[np.ndarray, "H W"], 
-            img_size: Optional[Tuple[int, int]] = None
         )-> Tuple[Int[np.ndarray, "H W 3"], Float[np.ndarray, "H W 1"]]:
         """
         Post-processes the given colour and depth images.
@@ -158,13 +174,14 @@ class CameraDriver(ZMQBackendObject):
             )
                 
         depth_image = np.nan_to_num(depth_image, nan=50000, posinf=50000, neginf=0)
+        
 
-        if img_size is None:
+        if self.img_size_hw == depth_image.shape and self.img_size_hw == colour_image.shape[:-1]:
             image = colour_image[:, :, ::-1]
             depth = depth_image
         else:
-            image = cv2.resize(colour_image, img_size)[:, :, ::-1]
-            depth = cv2.resize(depth_image, img_size)
+            image = cv2.resize(colour_image, self.img_size_hw)[:, :, ::-1]
+            depth = cv2.resize(depth_image, self.img_size_hw)
 
         # rotate 180 degree's because everything is upside down in order to center the camera
         if self.flip:
@@ -185,7 +202,8 @@ class CameraDriver(ZMQBackendObject):
         raise NotImplementedError()
 
     def uvdepth_to_xyz(self, u: int, v: int, depth: float) -> Tuple[float, float, float]:
-        """u, v are pixel coordinates, depth is in mm. Result coords should be in meters."""
+        """u, v are pixel coordinates, depth is in mm. Result coords should be in
+        meters. u is the width coordinate, v is the height coordinate."""
         params = self.get_parameters()
         fx, fy, cx, cy = params.fx, params.fy, params.cx, params.cy
 
@@ -223,15 +241,17 @@ class ZEDCamera(CameraDriver):
         self.flip = False  # Handled below; this is used in postprocess
 
         self._resolution = get_zed_resolution(cam_cfg.rgb_res.height, cam_cfg.rgb_res.width)
+        self.img_size_hw = (cam_cfg.rgb_res.height, cam_cfg.rgb_res.width)
 
         # see https://github.com/stereolabs/zed-python-api/blob/master/src/pyzed/sl_c.pxd
         init_params = sl.InitParameters()
         init_params.sdk_verbose = 0
         init_params.camera_resolution = self._resolution
+        init_params.coordinate_units = sl.UNIT.MILLIMETER
         
         init_params.depth_mode = sl.DEPTH_MODE.NEURAL  # SPEED, PERFORMANCE, ULTRA, NEURAL_PLUS
-        init_params.depth_minimum_distance = self._min_depth
-        init_params.depth_maximum_distance = self._max_depth
+        init_params.depth_minimum_distance = self._min_depth * 1000
+        init_params.depth_maximum_distance = self._max_depth * 1000
         init_params.camera_fps = 30
         if cam_cfg.flip: init_params.camera_image_flip = sl.FLIP_MODE.ON
         else: init_params.camera_image_flip = sl.FLIP_MODE.OFF
@@ -255,27 +275,41 @@ class ZEDCamera(CameraDriver):
         if not success:
             self._zed.close()
             raise RuntimeError("Failed to open ZED camera.")
-
-    def get_parameters(self) -> CameraParameters:
+        
+        zed_hw = get_zed_wh_from_resolution(self._resolution)
+        self._init_parameters(
+            (cam_cfg.rgb_res.height, cam_cfg.rgb_res.width), 
+            (zed_hw[1], zed_hw[0])
+            )
+        
+    def _init_parameters(self, cfg_res_hw: Tuple[int, int], zed_res_hw: Tuple[int, int]) -> None:
         import pyzed.sl as sl
-
         cam_params = self._zed.get_camera_information().camera_configuration.calibration_parameters
-        params = CameraParameters()
-        params.fx = cam_params.left_cam.fx
-        params.fy = cam_params.left_cam.fy
-        params.cx = cam_params.left_cam.cx
-        params.cy = cam_params.left_cam.cy
-        params.k1 = cam_params.left_cam.disto[0]
-        params.k2 = cam_params.left_cam.disto[1]
-        params.p1 = cam_params.left_cam.disto[2]
-        params.p2 = cam_params.left_cam.disto[3]
-        params.k3 = cam_params.left_cam.disto[4]
+        # print(f"ZED camera parameters: fx={cam_params.left_cam.fx}, fy={cam_params.left_cam.fy}, cx={cam_params.left_cam.cx}, cy={cam_params.left_cam.cy}, disto={cam_params.left_cam.disto}")
+        self.params = CameraParameters()
+        self.params.fx = cam_params.left_cam.fx
+        self.params.fy = cam_params.left_cam.fy
+        self.params.cx = cam_params.left_cam.cx
+        self.params.cy = cam_params.left_cam.cy
+        self.params.k1 = cam_params.left_cam.disto[0]
+        self.params.k2 = cam_params.left_cam.disto[1]
+        self.params.p1 = cam_params.left_cam.disto[2]
+        self.params.p2 = cam_params.left_cam.disto[3]
+        self.params.k3 = cam_params.left_cam.disto[4]
 
-        return params
+        # Effect of centre cropping: the central point is offset
+        sq_size = min(zed_res_hw[0], zed_res_hw[1])
+        self.params.cx -= (zed_res_hw[1] - sq_size) // 2
+        self.params.cy -= (zed_res_hw[0] - sq_size) // 2
 
-    def read(
-        self,
-        img_size: Optional[Tuple[int, int]] = None
+        # Effect of resizing: the focal lengths are scaled
+        self.params.fx *= cfg_res_hw[1] / sq_size
+        self.params.fy *= cfg_res_hw[0] / sq_size
+    
+    def get_parameters(self) -> CameraParameters:
+        return self.params
+
+    def read(self,
     ) -> Tuple[Int[np.ndarray, "H W 3"],  Float[np.ndarray, "H W 1"]]:
 
         import pyzed.sl as sl
@@ -297,7 +331,7 @@ class ZEDCamera(CameraDriver):
         colour_image = colour_image[:, :, :3]  # HxWx3
         depth_image = depth.get_data()  # HxW
 
-        image, depth = self._postprocess_img(colour_image, depth_image, img_size=img_size)
+        image, depth = self._postprocess_img(colour_image, depth_image)
 
         return image, depth
 
