@@ -1,6 +1,10 @@
+import time
+import random
+
 import numpy as np
 import cv2
 import transforms3d as t3d
+import datetime as dt
 
 from amiga.vision import KitchenObjectDetector, overlay_results
 from amiga.drivers.cameras import ZEDCamera , CameraDriver, CameraParameters # DO NOT REMOVE, used at eval
@@ -10,20 +14,28 @@ from amiga.vision import overlay_results
 
 def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: CameraDriver, robot: AMIGA):
     q = robot.get_named_joints_cfg(name="overlook")
-    res = robot.go_to_joint_positions(joint_positions=q)  
+    res = robot.go_to_joint_positions_through_safe_point(joint_positions=q, wait=True)  
     if res != True: raise ValueError("Failed to move to overlook position") 
     # print(f"Moved to overlook position: {q}")
 
+    key = None
+    while key != "c":
+        key = input("Press 'c' to continue: ")
+        key = key.lower()
+
     rgb, depth = camera.read()
     objs = detector(rgb)
-    # cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    cv2.imwrite("latest_rgb.png",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
     # depth = np.clip(depth, 0, 3000)
     # cv2.imwrite("latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8))
-    # if len(objs) > 0: cv2.imwrite("latest_objects.jpg", overlay_results(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), objs))
+    if len(objs) > 0: cv2.imwrite("latest_objects.jpg", overlay_results(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), objs))
 
-    det_obj = [obj for obj in objs if obj["class_name"] == obj_name]
-    if len(det_obj) == 0: raise ValueError(f"No {obj_name} bottle detected")
+    # det_obj = [obj for obj in objs if obj["class_name"] == obj_name]
+    # if len(det_obj) == 0: raise ValueError(f"No {obj_name} bottle detected")
     # print(f"Olive oil bottle detected: {olive_oil}")
+
+    det_obj = [random.choice(objs)] 
+    print(f"Random object detected: {det_obj[0]['class_name']}")
 
     x, y, w, h = det_obj[0]["xywh"]
     w, h = 0.9*w, 0.9*h  # make sure we get mostly the object
@@ -67,25 +79,44 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
     # print(f"Object coordinates in base_link frame: {obj_bl_coords}")
     
     target = obj_bl_coords
-    target[1] += 0.30  # offset in y (backwards)
+    target[1] += 0.35  # offset in y (backwards)
     target[2] += 0.05  # offset in z (upwards)
     # obj_bl_coords = np.array([0.0, -0.3, 0.8])
     # print(f"Moving to object coordinates: {obj_bl_coords}")
-
-    robot.go_to_eef_position_default_orientation(eef_position=obj_bl_coords)
-    import time
-    time.sleep(4)
+    waypoint = np.array([0.0, -0.35, 0.2])
+    robot.follow_eef_position_path_default_orientation(path=[waypoint, obj_bl_coords], wait=True)
     # rgb, depth= camera.read()
     # cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
     # depth = np.clip(depth, 0, 1000)
     # cv2.imwrite("latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8))
+    time.sleep(1)
+    robot.set_freedrive_mode(enable=True)
+    init_xyz = robot.get_observation()["ee_pose_euler"][:3]
+    rgb, depth = camera.read()
 
-    target[1] -= 0.31  
-    target[2] -= 0.05 
+    key = None
+    while key != "c":
+        key = input("Press 'c' to continue: ")
+        key = key.lower()
+
+    target_xyz = robot.get_observation()["ee_pose_euler"][:3]
+
     robot.close_gripper()
-    robot.go_to_eef_position_default_orientation(eef_position=obj_bl_coords, wait=True)
-    time.sleep(2)
+    time.sleep(3)
+    robot.set_freedrive_mode(enable=False)
+    robot.go_to_eef_position_default_orientation(eef_position=init_xyz, wait=True)
 
-    target[1] += 0.25
-    target[2] += 0.05
-    robot.go_to_eef_position_default_orientation(eef_position=obj_bl_coords, wait=True)
+    key = None
+    while key != "y" and key != "d":
+        key = input("Press 'y' to save, 'd' to discard: ")
+        key = key.lower()
+
+    if key == "y":
+        sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+        # Save initial images, position and target position
+        cv2.imwrite(f"data/grasp_shelf/{sample_id}_rgb.png", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+        np.save(f"data/grasp_shelf/{sample_id}_depth.npy", depth)
+        np.save(f"data/grasp_shelf/{sample_id}_init_xyz.npy", init_xyz)
+        np.save(f"data/grasp_shelf/{sample_id}_target_xyz.npy", target_xyz)
+
+    robot.open_gripper()

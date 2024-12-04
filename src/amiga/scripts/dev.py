@@ -36,5 +36,10 @@ def Dev(cfg: OmegaConf):
     rob_backend = eval(cfg.robot_zmq.class_name)(cfg.robot_zmq)
     robot = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
 
-    grasp_from_shelf("olive-oil-bottle", mdl, camera, robot)
+    stop = False
+    while not stop:
+        try:
+            grasp_from_shelf("olive-oil-bottle", mdl, camera, robot)
+        except KeyboardInterrupt:
+            stop = True
     
