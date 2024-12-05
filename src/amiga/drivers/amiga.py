@@ -147,7 +147,9 @@ class AMIGA(ZMQBackendObject):
         while not self.robot.isProgramRunning():
             print("UR program not running, re-uploading")
             self.robot.reuploadScript()
+            self._free_drive = False
             time.sleep(0.3)
+            
 
     def _load_named_joint_cfgs(self):
         """Load the named joint configurations from config file."""
@@ -297,12 +299,12 @@ class AMIGA(ZMQBackendObject):
         eef_pose[3:6] = rpy2rv(eef_pose[3], eef_pose[4], eef_pose[5])
 
         if self._use_gripper:
-            self.robot.moveL(pose=eef_pose[:6], asynchronous=(not wait))
+            self.robot.moveJ_IK(pose=eef_pose[:6], asynchronous=(not wait))
             if gripper_position is not None:
                 gripper_pos = gripper_position * 255
                 self.gripper.move(gripper_pos, 255, 10)
         else:
-            self.robot.moveL(eef_pose, asynchronous=(not wait))
+            self.robot.moveJ_IK(eef_pose, asynchronous=(not wait))
 
     def go_to_eef_position_default_orientation(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
         self._reload_ur_program_if_not_running()
@@ -398,6 +400,7 @@ class AMIGA(ZMQBackendObject):
         Args:
             enable (bool): True to enable freedrive mode, False to disable it.
         """
+        self._reload_ur_program_if_not_running()
         if enable and not self._free_drive:
             self._free_drive = True
             self.robot.freedriveMode(free_axes=[1, 1, 1, 0, 0, 0])

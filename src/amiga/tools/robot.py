@@ -36,7 +36,7 @@ if __name__ == "__main__":
         robot.set_freedrive_mode(enable=args.freedrive)
     elif args.home:
         q = robot.get_named_joints_cfg(name="home")
-        robot.go_to_joint_positions(joint_positions=q, wait=True)
+        robot.go_to_joint_positions(joint_positions=q, wait=False)
     else:
         raise ValueError("No action specified")
 

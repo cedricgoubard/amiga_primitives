@@ -104,13 +104,28 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
     robot.close_gripper()
     time.sleep(3)
     robot.set_freedrive_mode(enable=False)
-    robot.go_to_eef_position_default_orientation(eef_position=init_xyz, wait=True)
+    fall_back_xyz = init_xyz
+    fall_back_xyz[1] += 0.2
+    fall_back_xyz[2] += 0.08
+
+    default = t3d.euler.euler2quat(np.pi/2, -np.pi/4, 0.0, axes='sxyz')
+    tilt_forward = t3d.euler.euler2quat(np.pi/12, -np.pi/12, 0.0, axes='rxyz')
+    final_rot = t3d.quaternions.qmult(default, tilt_forward)
+    rpy = t3d.euler.quat2euler(final_rot, axes='sxyz')
+    
+    fall_back_pose = np.append(fall_back_xyz, rpy)
+    robot.go_to_eef_pose(eef_pose=fall_back_pose, wait=True)
+
+    rgb, depth = camera.read()
+    cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    depth = np.clip(depth, 0, 1000)
+    cv2.imwrite("latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8))
 
     key = None
     while key != "y" and key != "d":
         key = input("Press 'y' to save, 'd' to discard: ")
         key = key.lower()
-
+    
     if key == "y":
         sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         # Save initial images, position and target position
@@ -119,4 +134,12 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
         np.save(f"data/grasp_shelf/{sample_id}_init_xyz.npy", init_xyz)
         np.save(f"data/grasp_shelf/{sample_id}_target_xyz.npy", target_xyz)
 
+        cv2.imwrite(f"data/put_on_shelf/{sample_id}_rgb.png", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+        np.save(f"data/put_on_shelf/{sample_id}_depth.npy", depth)
+        np.save(f"data/put_on_shelf/{sample_id}_init_xyz.npy", init_xyz)
+        np.save(f"data/put_on_shelf/{sample_id}_target_xyz.npy", target_xyz)
+
+    robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.open_gripper()
+    time.sleep(0.5)
+    robot.go_to_eef_position_default_orientation(eef_position=init_xyz, wait=True)

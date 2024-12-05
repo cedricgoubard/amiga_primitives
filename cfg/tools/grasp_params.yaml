@@ -4,15 +4,15 @@ logs_dir: logs/${now}  # "now" has to be created in python code
 seed: 1006
 
 train_ratio: 0.8
-max_epochs: 500
+max_epochs: 5000
 log_every_n_steps: 1
-learning_rate: 0.001
+learning_rate: 0.002
 batch_size_train: 12
 batch_size_val: 3
 
 early_stopping:
   monitor: val_loss
-  patience: 100
+  patience: 200
   mode: min
 mdl_ckpt:
   monitor: val_loss

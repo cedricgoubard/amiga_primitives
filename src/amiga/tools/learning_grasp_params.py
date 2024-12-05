@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 import torchvision.transforms.v2 as T
 import numpy as np
-from PIL import Image
+import cv2
 import pytorch_lightning as L
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
@@ -115,13 +115,18 @@ class GraspingDataset(Dataset):
 
         # Load RGB image
         rgb_path = os.path.join(self.data_dir, f"{timestamp}_rgb.png")
-        rgb_image = Image.open(rgb_path).convert("RGB")
+        rgb_image = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
+        rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
+        # Resize to 224x224
+        rgb_image = cv2.resize(rgb_image, (224, 224), interpolation=cv2.INTER_LINEAR)
         # Normalise to [0, 1]
-        rgb_tensor = torch.tensor(np.array(rgb_image), dtype=torch.float32).permute(2, 0, 1) / 255.0  
+        rgb_tensor = torch.tensor(rgb_image, dtype=torch.float32).permute(2, 0, 1) / 255.0  
 
         # Load depth map
         depth_path = os.path.join(self.data_dir, f"{timestamp}_depth.npy")
         depth_data = np.load(depth_path)
+        # Resize to 224x224
+        depth_data = cv2.resize(depth_data, (224, 224), interpolation=cv2.INTER_NEAREST)[..., None]
         # Normalise to [0, 1]; max depth is 50cm
         max_depth_mm = 500
         depth_tensor = torch.tensor(
@@ -144,49 +149,43 @@ class GraspingDataset(Dataset):
 
 
 class GraspingModel(nn.Module):
-    def __init__(self, depth_mean, depth_std, img_size):
+    def __init__(self, img_size):
         super(GraspingModel, self).__init__()
         # Load a pre-trained ResNet18 backbone for RGB
         self.rgb_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         self.rgb_backbone.fc = nn.Identity()  # Remove final classification layer
+        # Freeze backbone
+        for param in self.rgb_backbone.parameters():
+            param.requires_grad = False
         # Print n params
-        print(f"Number of parameters (rgb): {sum(p.numel() for p in self.rgb_backbone.parameters())}")
-
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.depth_mean = depth_mean.to(self.device)
-        self.depth_std = depth_std.to(self.device)
+        print(f"Number of parameters (rgb): {sum(p.numel() for p in self.rgb_backbone.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.rgb_backbone.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
 
         # Load an adapted resnet for depth
         self.depth_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         self.depth_backbone.fc = nn.Identity()  # Remove final classification layer
         self.depth_backbone.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        for param in self.depth_backbone.parameters():
+            param.requires_grad = False
         # Print n params
-        print(f"Number of parameters (depth): {sum(p.numel() for p in self.depth_backbone.parameters())}")
+        print(f"Number of parameters (depth): {sum(p.numel() for p in self.depth_backbone.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.depth_backbone.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
 
         # Combine processed RGB and depth features and predict dx, dy, dz
         self.fc = nn.Sequential(
             nn.Linear(512 + 512, 256),  # ResNet18 outputs 512 features
             nn.ReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(256, 128),
             nn.ReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(128, 3)  # Output dx, dy, dz
         )
         # Print n params
-        print(f"Number of parameters (fc): {sum(p.numel() for p in self.fc.parameters())}")
+        print(f"Number of parameters (fc): {sum(p.numel() for p in self.fc.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.fc.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
 
 
     def forward(self, rgb, depth):
-        # Normalise images with ImageNet statistics
-        means = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(self.device)
-        stds = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(self.device)
-        rgb = (rgb - means) / stds
-
         # Process RGB through ResNet18
         rgb_features = self.rgb_backbone(rgb)
-
-        # Normalise depth images
-        depth = (depth - self.depth_mean) / self.depth_std  # Manually measured on dataset
 
         # Process depth through a small convolutional network
         depth_features = self.depth_backbone(depth)
@@ -198,9 +197,17 @@ class GraspingModel(nn.Module):
 
 
 class GraspingLightningModule(L.LightningModule):
-    def __init__(self, learning_rate=1e-3, depth_mean=0.8479, depth_std=0.2751, img_size=256):
+    def __init__(self, learning_rate=1e-3, stats=None, img_size=256):
         super(GraspingLightningModule, self).__init__()
-        self.model = GraspingModel(depth_mean, depth_std, img_size=img_size)
+        if stats is None: 
+            print("Stats not provided, using default values")
+            stats = {
+                'depth': {'mean': torch.tensor(0.8479), 'std': torch.tensor(0.2752)}, 
+                'dx_dy_dz': {'mean': torch.tensor([-0.0279, -0.1569, -0.0450]), 'std': torch.tensor([0.0127, 0.0309, 0.0187])}
+                }
+        self.stats = stats
+       
+        self.model = GraspingModel(img_size=img_size)
         self.learning_rate = learning_rate
         self.save_hyperparameters()
 
@@ -227,6 +234,12 @@ class GraspingLightningModule(L.LightningModule):
         """
         Forward pass of the model.
         """
+        # Normalise depth images
+        depth = (depth - self.stats["depth"]["mean"].to(self.device)) / self.stats["depth"]["std"].to(self.device)
+        # Normalise images with ImageNet statistics
+        means = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(self.device)
+        stds = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(self.device)
+        rgb = (rgb - means) / stds
         return self.model(rgb, depth)
 
     def training_step(self, batch, batch_idx):
@@ -248,9 +261,7 @@ class GraspingLightningModule(L.LightningModule):
                         f"image_max_{key}": value.max(),
                     })
 
-        rgb, depth, target = batch["rgb"], batch["depth"], batch["dx_dy_dz"]
-        predictions = self.forward(rgb, depth)
-        loss = F.mse_loss(predictions, target)  # Mean Squared Error Loss
+        loss = self.compute_loss(batch)
         self.log("train_loss", loss)
         return loss
 
@@ -258,15 +269,22 @@ class GraspingLightningModule(L.LightningModule):
         """
         Validation step.
         """
-        rgb, depth, target = batch["rgb"], batch["depth"], batch["dx_dy_dz"]
-        
         if not self._val_sample_is_saved:
             self._save_grid(batch, "val")
             self._val_sample_is_saved = True
 
-        predictions = self.forward(rgb, depth)
-        loss = F.mse_loss(predictions, target)
+        loss = self.compute_loss(batch)
         self.log("val_loss", loss, prog_bar=True)
+
+    def compute_loss(self, batch):
+        rgb, depth, target = batch["rgb"], batch["depth"], batch["dx_dy_dz"]
+        predictions = self.forward(rgb, depth)
+
+        # Normalise target values
+        target = (target - self.stats["dx_dy_dz"]["mean"].to(self.device)) / self.stats["dx_dy_dz"]["std"].to(self.device)
+
+        loss = F.mse_loss(predictions, target)
+        return loss
 
     def configure_optimizers(self):
         """
@@ -303,16 +321,17 @@ if __name__ == "__main__":
 
     
     # Iterate over all dataset, compute mean and std of depth image
-    depth_mean = 0
-    depth_std = 0
+    stats = {"depth": {"mean": 0, "std": 0}, "dx_dy_dz": {"mean": [], "std": 0, }}
     for i in range(len(train_dataset)):
         sample = train_dataset[i]
-        depth_mean += sample["depth"].mean()
-        depth_std += sample["depth"].std()
-    depth_mean /= len(train_dataset)
-    depth_std /= len(train_dataset)
-    print(f"Mean depth: {depth_mean}, Std depth: {depth_std}")
+        stats["depth"]["mean"] += sample["depth"].mean()
+        stats["depth"]["std"] += sample["depth"].std()
+        stats["dx_dy_dz"]["mean"] += [sample["dx_dy_dz"]]
 
+    stats["depth"]["mean"] /= len(train_dataset)
+    stats["depth"]["std"] /= len(train_dataset)
+    stats["dx_dy_dz"]["std"] = torch.stack(stats["dx_dy_dz"]["mean"]).std(dim=0)
+    stats["dx_dy_dz"]["mean"] = torch.stack(stats["dx_dy_dz"]["mean"]).mean(dim=0)
    
     train_dataloader = DataLoader(
         train_dataset,
@@ -335,8 +354,7 @@ if __name__ == "__main__":
 
     model = GraspingLightningModule(
         learning_rate=cfg.learning_rate,
-        depth_mean=depth_mean,
-        depth_std=depth_std,
+        stats=stats,
         img_size=train_dataset[0]["rgb"].shape[-1],
         )
 
