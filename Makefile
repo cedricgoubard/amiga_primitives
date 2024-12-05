@@ -108,6 +108,22 @@ run-handeye:
 		-it \
 		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
 
+train-grasp:
+	@docker run \
+		--runtime=nvidia \
+		--rm \
+		--privileged \
+		--name ${project-name}-train-grasp \
+		--net=host \
+		-v ${current_dir}:/amiga \
+		-v ${current_dir}/resources/cache:/home/${USER}/.cache \
+		-v ${current_dir}/resources/.bash_history:/home/${USER}/.bash_history \
+		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
+		--user ${UID}:${GID} \
+		-it \
+		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.learning_grasp_params --cfg cfg/tools/grasp_params.yaml ${rob_flag}"
+
+
 open-gripper: rob_flag=--open
 open-gripper: .robot_tool
 
@@ -171,6 +187,7 @@ get-rs-img:
 .build-base:
 	@touch ${current_dir}/resources/.bash_history
 	@touch ${current_dir}/resources/.netrc
+	@mkdir -p ${current_dir}/resources/cache/
 	docker build -f dockerfiles/Dockerfile.base -t ${project-name}-base:latest .
 
 build-zed: .build-base
