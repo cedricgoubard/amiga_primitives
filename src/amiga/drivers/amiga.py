@@ -144,11 +144,19 @@ class AMIGA(ZMQBackendObject):
         return len(missing_keys) == 0
 
     def _reload_ur_program_if_not_running(self):
+        while not self.robot.isConnected():
+            print("Reconnecting to robot")
+            self.robot.reconnect()
+            time.sleep(0.5)
+
         while not self.robot.isProgramRunning():
             print("UR program not running, re-uploading")
             self.robot.reuploadScript()
             self._free_drive = False
             time.sleep(0.3)
+
+        if not self.robot.isProgramRunning() and self.robot.isConnected():
+            self._reload_ur_program_if_not_running()
             
 
     def _load_named_joint_cfgs(self):

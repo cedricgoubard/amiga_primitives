@@ -113,7 +113,7 @@ train-grasp:
 		--runtime=nvidia \
 		--rm \
 		--privileged \
-		--name ${project-name}-train-grasp \
+		--name ${project-name}-train-grasp2 \
 		--net=host \
 		-v ${current_dir}:/amiga \
 		-v ${current_dir}/resources/cache:/home/${USER}/.cache \

@@ -24,8 +24,10 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
         key = key.lower()
 
     rgb, depth = camera.read()
-    objs = detector(rgb)
+    objs = detector(rgb, tracking=False)
     cv2.imwrite("latest_rgb.png",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    cv2.imwrite(f"data/obj_det/{sample_id}_rgb.png", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
     # depth = np.clip(depth, 0, 3000)
     # cv2.imwrite("latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8))
     if len(objs) > 0: cv2.imwrite("latest_objects.jpg", overlay_results(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), objs))
@@ -79,8 +81,9 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
     # print(f"Object coordinates in base_link frame: {obj_bl_coords}")
     
     target = obj_bl_coords
-    target[1] += 0.35  # offset in y (backwards)
-    target[2] += 0.05  # offset in z (upwards)
+    offset = random.uniform(0.35, 0.50)
+    target[1] += offset  # offset in y (backwards)
+    target[2] += 0.06  # offset in z (upwards)
     # obj_bl_coords = np.array([0.0, -0.3, 0.8])
     # print(f"Moving to object coordinates: {obj_bl_coords}")
     waypoint = np.array([0.0, -0.35, 0.2])
@@ -102,11 +105,11 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
     target_xyz = robot.get_observation()["ee_pose_euler"][:3]
 
     robot.close_gripper()
-    time.sleep(3)
+    time.sleep(2)
     robot.set_freedrive_mode(enable=False)
     fall_back_xyz = init_xyz
     fall_back_xyz[1] += 0.2
-    fall_back_xyz[2] += 0.08
+    fall_back_xyz[2] += 0.09
 
     default = t3d.euler.euler2quat(np.pi/2, -np.pi/4, 0.0, axes='sxyz')
     tilt_forward = t3d.euler.euler2quat(np.pi/12, -np.pi/12, 0.0, axes='rxyz')
@@ -141,5 +144,5 @@ def grasp_from_shelf(obj_name: str, detector: KitchenObjectDetector, camera: Cam
 
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.open_gripper()
-    time.sleep(0.5)
+    time.sleep(1.0)
     robot.go_to_eef_position_default_orientation(eef_position=init_xyz, wait=True)

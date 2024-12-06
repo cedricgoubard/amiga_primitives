@@ -3,16 +3,28 @@ logs_dir: logs/${now}  # "now" has to be created in python code
 
 seed: 1006
 
-train_ratio: 0.8
-max_epochs: 5000
+img_size: 640
+max_depth_mm: 600
+
+use_rgb: false
+rgb_backbone: resnet18  # resnet18 or smallcnn
+freeze_rgb_backbone: false
+
+# No reason for these to change too much
+use_depth: true
+depth_backbone: smallcnn  # resnet18 or smallcnn
+freeze_depth_backbone: false
+
+train_ratio: 0.75
+max_epochs: 7000
 log_every_n_steps: 1
 learning_rate: 0.002
-batch_size_train: 12
-batch_size_val: 3
+batch_size_train: 84
+batch_size_val: 42
 
 early_stopping:
   monitor: val_loss
-  patience: 200
+  patience: 300
   mode: min
 mdl_ckpt:
   monitor: val_loss

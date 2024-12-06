@@ -77,8 +77,33 @@ def create_grid_img(imgs):
     return final_img
 
 
+class SmallCNNBackbone(nn.Module):
+    def __init__(self, img_size: int):
+        super(SmallCNNBackbone, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=1, padding=2)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.fc1 = nn.Linear(128 * (img_size // (4*2*2*2)) ** 2, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(x, kernel_size=4, stride=4)
+        x = F.relu(self.conv2(x))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.conv3(x))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.conv4(x))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return x
+
+
 class GraspingDataset(Dataset):
-    def __init__(self, data_dir, idcs: List[int] = None):
+    def __init__(self, cfg, idcs: List[int] = None):
         """
         Initialises the dataset by scanning the directory for files and preparing
         a list of samples to load.
@@ -87,12 +112,14 @@ class GraspingDataset(Dataset):
             data_dir (str): Path to the data directory.
             idcs (List[int]): List of indices to load. If None, all samples are loaded.
         """
-        self.data_dir = data_dir
+        self.data_dir = cfg.data_dir
         # Collect all the timestamps based on the shared prefix
-        self.timestamps = sorted(set(f.split("_")[0] for f in os.listdir(data_dir) if "_" in f))
+        self.timestamps = sorted(set(f.split("_")[0] for f in os.listdir(cfg.data_dir) if "_" in f))
 
         if idcs is not None:
             self.timestamps = [self.timestamps[i] for i in idcs]
+
+        self.cfg = cfg
 
     def __len__(self):
         return len(self.timestamps)
@@ -118,7 +145,7 @@ class GraspingDataset(Dataset):
         rgb_image = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
         rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
         # Resize to 224x224
-        rgb_image = cv2.resize(rgb_image, (224, 224), interpolation=cv2.INTER_LINEAR)
+        rgb_image = cv2.resize(rgb_image, (self.cfg.img_size, self.cfg.img_size), interpolation=cv2.INTER_LINEAR)
         # Normalise to [0, 1]
         rgb_tensor = torch.tensor(rgb_image, dtype=torch.float32).permute(2, 0, 1) / 255.0  
 
@@ -126,12 +153,11 @@ class GraspingDataset(Dataset):
         depth_path = os.path.join(self.data_dir, f"{timestamp}_depth.npy")
         depth_data = np.load(depth_path)
         # Resize to 224x224
-        depth_data = cv2.resize(depth_data, (224, 224), interpolation=cv2.INTER_NEAREST)[..., None]
+        depth_data = cv2.resize(depth_data, (self.cfg.img_size, self.cfg.img_size), interpolation=cv2.INTER_NEAREST)[..., None]
         # Normalise to [0, 1]; max depth is 50cm
-        max_depth_mm = 500
         depth_tensor = torch.tensor(
-            np.clip(depth_data, 0, max_depth_mm), dtype=torch.float32
-            ).permute(2, 0, 1) / max_depth_mm
+            np.clip(depth_data, 0, self.cfg.max_depth_mm), dtype=torch.float32
+            ).permute(2, 0, 1) / self.cfg.max_depth_mm
 
 
         # Load initial and target positions
@@ -149,29 +175,49 @@ class GraspingDataset(Dataset):
 
 
 class GraspingModel(nn.Module):
-    def __init__(self, img_size):
+    def __init__(self, cfg):
         super(GraspingModel, self).__init__()
-        # Load a pre-trained ResNet18 backbone for RGB
-        self.rgb_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-        self.rgb_backbone.fc = nn.Identity()  # Remove final classification layer
-        # Freeze backbone
-        for param in self.rgb_backbone.parameters():
-            param.requires_grad = False
-        # Print n params
-        print(f"Number of parameters (rgb): {sum(p.numel() for p in self.rgb_backbone.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.rgb_backbone.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
+        if cfg.use_rgb:
+            if cfg.rgb_backbone == "resnet18":
+                # Load a pre-trained ResNet18 backbone for RGB
+                self.rgb_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+                self.rgb_backbone.fc = nn.Identity()  # Remove final classification layer
+            elif cfg.rgb_backbone == "smallcnn":
+                self.rgb_backbone = SmallCNNBackbone(cfg.img_size)
+            else:
+                raise ValueError(f"Unknown RGB backbone {cfg.rgb_backbone}")
+            
+            if cfg.freeze_rgb_backbone:
+                for param in self.rgb_backbone.parameters():
+                    param.requires_grad = False
+            # Print n params
+            print(f"RGB backbone ({cfg.rgb_backbone}): {sum(p.numel() for p in self.rgb_backbone.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.rgb_backbone.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
 
-        # Load an adapted resnet for depth
-        self.depth_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-        self.depth_backbone.fc = nn.Identity()  # Remove final classification layer
-        self.depth_backbone.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        for param in self.depth_backbone.parameters():
-            param.requires_grad = False
-        # Print n params
-        print(f"Number of parameters (depth): {sum(p.numel() for p in self.depth_backbone.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.depth_backbone.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
+        if cfg.use_depth:
+            # Load an adapted resnet for depth
+            if cfg.depth_backbone == "resnet18":
+                self.depth_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+                self.depth_backbone.fc = nn.Identity()  # Remove final classification layer
+                self.depth_backbone.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+            elif cfg.depth_backbone == "smallcnn":
+                self.depth_backbone = SmallCNNBackbone(cfg.img_size)
+            else: 
+                raise ValueError(f"Unknown depth backbone {cfg.depth_backbone}")
+
+            if cfg.freeze_depth_backbone:
+                for param in self.depth_backbone.parameters():
+                    param.requires_grad = False
+            # Print n params
+            print(f"Depth backbone ({cfg.depth_backbone}): {sum(p.numel() for p in self.depth_backbone.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.depth_backbone.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
 
         # Combine processed RGB and depth features and predict dx, dy, dz
+        first_layer_input = (
+            (512 if cfg.use_rgb else 0)
+            + (512 if cfg.use_depth else 0)
+        )
+        print(f"First layer input: {first_layer_input}")
         self.fc = nn.Sequential(
-            nn.Linear(512 + 512, 256),  # ResNet18 outputs 512 features
+            nn.Linear(first_layer_input, 256),
             nn.ReLU(),
             nn.Dropout(p=0.5),
             nn.Linear(256, 128),
@@ -180,24 +226,33 @@ class GraspingModel(nn.Module):
             nn.Linear(128, 3)  # Output dx, dy, dz
         )
         # Print n params
-        print(f"Number of parameters (fc): {sum(p.numel() for p in self.fc.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.fc.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
+        print(f"Total: {sum(p.numel() for p in self.fc.parameters()) / 1e6:.1f}M ({sum(p.numel() for p in self.fc.parameters() if p.requires_grad) / 1e6:.1f}M trainable)")
 
+        self.cfg = cfg
 
     def forward(self, rgb, depth):
         # Process RGB through ResNet18
-        rgb_features = self.rgb_backbone(rgb)
+        if self.cfg.use_rgb:
+            rgb_features = self.rgb_backbone(rgb)
 
         # Process depth through a small convolutional network
-        depth_features = self.depth_backbone(depth)
+        if self.cfg.use_depth:
+            depth_features = self.depth_backbone(depth)
 
-        # Concatenate the features and pass through fully connected layers
-        combined_features = torch.cat((rgb_features, depth_features), dim=1)
+        if self.cfg.use_rgb and self.cfg.use_depth:
+            # Concatenate the features and pass through fully connected layers
+            combined_features = torch.cat((rgb_features, depth_features), dim=1)
+        elif self.cfg.use_rgb:
+            combined_features = rgb_features
+        elif self.cfg.use_depth:
+            combined_features = depth_features
+        
         output = self.fc(combined_features)
         return output
 
 
 class GraspingLightningModule(L.LightningModule):
-    def __init__(self, learning_rate=1e-3, stats=None, img_size=256):
+    def __init__(self, cfg: OmegaConf, stats=None):
         super(GraspingLightningModule, self).__init__()
         if stats is None: 
             print("Stats not provided, using default values")
@@ -207,9 +262,9 @@ class GraspingLightningModule(L.LightningModule):
                 }
         self.stats = stats
        
-        self.model = GraspingModel(img_size=img_size)
-        self.learning_rate = learning_rate
-        self.save_hyperparameters()
+        self.model = GraspingModel(cfg)
+        self.cfg = cfg
+        self.save_hyperparameters(OmegaConf.to_container(cfg, resolve=True))
 
         self.augments = T.Compose([
                 T.ColorJitter(brightness=0.5, contrast=0.15, saturation=0.15, hue=0.15),
@@ -261,8 +316,7 @@ class GraspingLightningModule(L.LightningModule):
                         f"image_max_{key}": value.max(),
                     })
 
-        loss = self.compute_loss(batch)
-        self.log("train_loss", loss)
+        loss = self.compute_loss(batch, step="train")
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -273,50 +327,78 @@ class GraspingLightningModule(L.LightningModule):
             self._save_grid(batch, "val")
             self._val_sample_is_saved = True
 
-        loss = self.compute_loss(batch)
-        self.log("val_loss", loss, prog_bar=True)
+        loss = self.compute_loss(batch, step="val")
 
-    def compute_loss(self, batch):
+    def compute_loss(self, batch, step):
         rgb, depth, target = batch["rgb"], batch["depth"], batch["dx_dy_dz"]
         predictions = self.forward(rgb, depth)
 
         # Normalise target values
         target = (target - self.stats["dx_dy_dz"]["mean"].to(self.device)) / self.stats["dx_dy_dz"]["std"].to(self.device)
 
-        loss = F.mse_loss(predictions, target)
-        return loss
+        mse_loss = F.mse_loss(predictions, target)
+        self.log(f"{step}_loss", mse_loss, prog_bar=(step == "val"))
+        
+        if step == "val":
+            # Unnormalise for logging
+            pred_unnorm = predictions * self.stats["dx_dy_dz"]["std"].to(self.device) + self.stats["dx_dy_dz"]["mean"].to(self.device)
+            target_unnorm = target * self.stats["dx_dy_dz"]["std"].to(self.device) + self.stats["dx_dy_dz"]["mean"].to(self.device)
+
+            pred_unnorm = pred_unnorm.unsqueeze(1)
+            target_unnorm = target_unnorm.unsqueeze(1)
+
+            dist = torch.cdist(pred_unnorm, target_unnorm, p=2)
+            dist_mean = dist.mean()
+            dist_std = dist.std()
+
+            self.log(f"{step}_dist_mm_mean", dist_mean*1000, prog_bar=(step == "val"))
+            self.log(f"{step}_dist_mm_std", dist_std*1000)
+
+            for i, coord in enumerate(["x", "y", "z"]):
+                coord_dist = torch.cdist(pred_unnorm[:, :, i], target_unnorm[:, :, i], p=2)
+                
+                self.log(f"{step}_dist_{coord}_mm_std", coord_dist.std()*1000)
+                self.log(f"{step}_dist_{coord}_mm_mean", coord_dist.mean()*1000)
+                
+        return mse_loss
 
     def configure_optimizers(self):
         """
         Configure optimizers for training.
         """
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
         return optimizer
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cfg", type=str, help="Path to the config file", required=True)
+def update_cfg_with_sweep_params(cfg):
+    """
+    Updates the config with sweep parameters.
+    """
+    sweep_config = wandb.config
+    cfg.img_size = sweep_config.img_size
+    cfg.max_depth_mm = sweep_config.max_depth_mm
+    cfg.use_rgb = sweep_config.use_rgb
+    cfg.depth_backbone = sweep_config.depth_backbone
+    cfg.learning_rate = sweep_config.learning_rate
+    cfg.batch_size_train = sweep_config.batch_size_train
+    return cfg
 
-    args = parser.parse_args()
 
-    cfg = OmegaConf.load(args.cfg)
-    current_time = {"now": datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}
-    cfg = OmegaConf.merge(cfg, OmegaConf.create(current_time))
-    os.makedirs(cfg.logs_dir, exist_ok=True)
-
+def main(cfg, is_sweep: bool = False):
     L.seed_everything(cfg.seed)
-    torch.set_float32_matmul_precision('high')  # medium or high
-    torch.multiprocessing.set_start_method('spawn')
 
+    wandb.init()
+    if is_sweep:
+        cfg = update_cfg_with_sweep_params(cfg)
+        
     n_samples = len(set(f.split("_")[0] for f in os.listdir(cfg.data_dir) if "_" in f))
     
     shuffled_indices = np.random.permutation(n_samples)
     train_indices = shuffled_indices[: int(cfg.train_ratio * n_samples)]
     val_indices = shuffled_indices[int(cfg.train_ratio * n_samples) :]
     
-    train_dataset = GraspingDataset(cfg.data_dir, idcs=train_indices)
-    val_dataset = GraspingDataset(cfg.data_dir, idcs=val_indices)
+    train_dataset = GraspingDataset(cfg, idcs=train_indices)
+    val_dataset = GraspingDataset(cfg, idcs=val_indices)
     print(f"{len(train_dataset)} training samples, {len(val_dataset)} validation samples")
 
     
@@ -353,9 +435,8 @@ if __name__ == "__main__":
     )
 
     model = GraspingLightningModule(
-        learning_rate=cfg.learning_rate,
+        cfg=cfg,
         stats=stats,
-        img_size=train_dataset[0]["rgb"].shape[-1],
         )
 
     callbacks = [RichProgressBar()]
@@ -372,3 +453,40 @@ if __name__ == "__main__":
     )
 
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cfg", type=str, help="Path to the config file", required=True)
+
+    args = parser.parse_args()
+
+    cfg = OmegaConf.load(args.cfg)
+    current_time = {"now": datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}
+    cfg = OmegaConf.merge(cfg, OmegaConf.create(current_time))
+    os.makedirs(cfg.logs_dir, exist_ok=True)
+
+    torch.set_float32_matmul_precision('high')  # medium or high
+    torch.multiprocessing.set_start_method('spawn')
+
+    # For simple exec
+    # main(cfg, is_sweep=False)
+
+    # For sweeping
+    wandb.login()
+    sweep_configuration = {
+        "method": "random",
+        "metric": {"goal": "minimize", "name": "val_loss"},
+        "parameters": {
+            "img_size": {"values": [224, 480, 640]},
+            "max_depth_mm": {"values": [400, 600, 700]},
+            "use_rgb": {"values": [True, False]},
+            "depth_backbone": {"values": ["resnet18", "smallcnn"]},
+            "learning_rate": {"min": 1e-5, "max": 1e-2},
+            "batch_size_train": {"values": [16, 32, 48]},
+        },
+    }
+
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project="amigrasp")
+    wandb.agent(sweep_id, function=lambda: main(cfg, is_sweep=True), count=500)
+    
