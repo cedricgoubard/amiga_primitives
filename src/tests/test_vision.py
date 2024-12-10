@@ -65,13 +65,15 @@ class TestKitchenObjectDetector(unittest.TestCase):
                         id=torch.from_numpy(np.array([1])), 
                         xywh=torch.from_numpy(np.array([[50, 50, 20, 20]])), 
                         cls=torch.from_numpy(np.array([0])), 
-                        conf=torch.from_numpy(np.array([0.88]))
+                        conf=torch.from_numpy(np.array([0.88])),
+                        is_track=True
                     ),
                     MagicMock(
                         id=torch.from_numpy(np.array([2])), 
                         xywh=torch.from_numpy(np.array([[100, 100, 30, 30]])), 
                         cls=torch.from_numpy(np.array([1])), 
-                        conf=torch.from_numpy(np.array([0.92]))
+                        conf=torch.from_numpy(np.array([0.92])),
+                        is_track=True
                     )
                 ]
             )
@@ -84,7 +86,7 @@ class TestKitchenObjectDetector(unittest.TestCase):
         img = np.random.randint(10, 256, size=(200, 200, 3), dtype=np.uint8)
 
         # Call the detector
-        results = self.detector(img)
+        results = self.detector(img, debug=False)
         # Verify detected objects
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["id"], 1)
@@ -95,20 +97,20 @@ class TestKitchenObjectDetector(unittest.TestCase):
     def test_time_buffer_keeps_recent_objects(self):
         """Test that objects remain within the buffer period."""
         img = np.random.randint(10, 256, size=(200, 200, 3), dtype=np.uint8)
-
+        debug = False
         now = dt.datetime.now()
         # Initial detection
         with patch("datetime.datetime") as mock_dt:
             mock_dt.now.return_value = now
-            self.detector(img)
-
+            self.detector(img, debug=debug)
+        
         # Mock an empty model output to simulate a frame without detections
         self.mock_model.track.return_value = [ MagicMock(boxes=[]) ]
 
         # Call again after less than the time buffer duration
         with patch("datetime.datetime") as mock_dt:
             mock_dt.now.return_value = now + dt.timedelta(seconds=0.3)
-            results = self.detector(img)
+            results = self.detector(img, debug=debug)
 
         # Verify that previous objects are still retained
         self.assertEqual(len(results), 2)

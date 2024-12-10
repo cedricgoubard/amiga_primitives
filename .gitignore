@@ -6,6 +6,8 @@ data/
 .pytest_cache/
 *.jpg
 hand_eye_samples.json
+wandb/
+logs/
 
 # img debug
 latest_depth.jpg

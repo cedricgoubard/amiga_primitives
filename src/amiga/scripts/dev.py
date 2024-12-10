@@ -39,7 +39,7 @@ def Dev(cfg: OmegaConf):
     stop = False
     while not stop:
         try:
-            grasp_from_shelf("olive-oil-bottle", mdl, camera, robot)
+            grasp_from_shelf(mdl, camera, robot)
         except KeyboardInterrupt:
             stop = True
     

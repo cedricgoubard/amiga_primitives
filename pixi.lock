@@ -291,7 +291,7 @@ packages:
   name: amiga
   version: 0.0.1
   path: .
-  sha256: 8df8ebba8b078158a2f7ad9f2eda3c1819cc95263eb325752c05a7b8a63ff845
+  sha256: df9e36f2a3465ecef54db45a0ef21b03326eec28a9238414b31215f49afed5b4
   requires_dist:
   - ur-rtde>=1.5.9,<2
   - opencv-python>=4.10.0.84,<5

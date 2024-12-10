@@ -56,7 +56,7 @@ run-zed-obj-det:
 		-it \
 		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.detect_objects --cfg cfg/zed.yaml --weights resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt"
 
-run-dev:
+collect-grasp-demo:
 	@docker run \
 		--runtime=nvidia \
 		--rm \
@@ -66,7 +66,7 @@ run-dev:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install transforms3d && pip install -e . && python -m amiga --script --cfg cfg/scripts/dev.yaml"
+		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
 
 run-realsense:
 	@docker run \
@@ -83,7 +83,6 @@ run-realsense:
 		-it \
 		${project-name}-rs:latest bash -c "pip install -e . && python -m amiga --zmq --cfg cfg/realsense.yaml"
 
-
 run-handeye:
 	@docker run \
 		--runtime=nvidia \
@@ -96,6 +95,7 @@ run-handeye:
 		-it \
 		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml
 
+
 .robot_tool:
 	@docker run \
 		--runtime=nvidia \
@@ -107,6 +107,7 @@ run-handeye:
 		--user ${UID}:${GID} \
 		-it \
 		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
+
 
 train-grasp:
 	@docker run \

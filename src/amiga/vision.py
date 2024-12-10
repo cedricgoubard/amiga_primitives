@@ -9,7 +9,7 @@ from ultralytics import YOLO
 import cv2
 
 
-def load_yolov11_model(mdl_path: str) -> None:
+def load_yolov11_model(mdl_path: str) -> YOLO:
     return YOLO(mdl_path, verbose=False)
 
 
@@ -30,8 +30,13 @@ def deterministic_color(name):
     return tuple(int(hash_bytes[i]) % 256 for i in range(3))
 
 
-def overlay_results(image: np.ndarray, results: List[Dict[str, Any]]) -> np.ndarray:
+def overlay_results(
+        rgb: np.ndarray,
+        results: List[Dict[str, Any]],
+        ) -> np.ndarray:
     """Overlay detection results on an image."""
+
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
     for result in results:
         # Unpack details
@@ -48,7 +53,7 @@ def overlay_results(image: np.ndarray, results: List[Dict[str, Any]]) -> np.ndar
         color = deterministic_color(class_name)
 
         # Draw the bounding box
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
+        cv2.rectangle(bgr, (x1, y1), (x2, y2), color, 2)
 
         # Prepare label text
         if obj_id is None:
@@ -58,14 +63,13 @@ def overlay_results(image: np.ndarray, results: List[Dict[str, Any]]) -> np.ndar
 
         # Put the label above the box
         (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(image, (x1, y1 - text_height - baseline), (x1 + text_width, y1), color, -1)
-        cv2.putText(image, label, (x1, y1 - baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.rectangle(bgr, (x1, y1 - text_height - baseline), (x1 + text_width, y1), color, -1)
+        cv2.putText(bgr, label, (x1, y1 - baseline), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    return image
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
-from typing import Any, Dict, List
-import datetime as dt
-import numpy as np
+    return rgb
+
 
 class KitchenObjectDetector:
     def __init__(self, mdl_path: str, time_buffer_sec: float = 0.5):
@@ -80,7 +84,12 @@ class KitchenObjectDetector:
         self.time_buffer = dt.timedelta(seconds=time_buffer_sec)
         self.tracked_objects: Dict[int, Dict] = {}  # Tracks object_id, bbox, and last_seen timestamp.
 
-    def __call__(self, img: np.ndarray, tracking: bool = True) -> List[Dict[str, Any]]:
+    def __call__(
+            self,
+            img: np.ndarray,
+            tracking: bool = True,
+            debug: bool = False
+            ) -> List[Dict[str, Any]]:
         """
         Process an image to detect kitchen objects.
 
@@ -93,17 +102,18 @@ class KitchenObjectDetector:
         """
         img = _check_img(img)
 
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
         # Get results from the YOLO model
         if tracking:
             results = self.mdl.track(img, verbose=False)[0]
         else:
             results = self.mdl.predict(img, verbose=False)[0]
 
-        detected_objects = []
-        current_time = dt.datetime.now()
         class_best: Dict[int, Dict[str, Any]] = {}
-
-        # Process results
+        current_time = dt.datetime.now()
+        
+        # Step 1: Filter results to keep only the highest-confidence object for each class
         for obj in results.boxes:
             if tracking and not obj.is_track:
                 continue
@@ -114,7 +124,8 @@ class KitchenObjectDetector:
             cls_name = self.mdl.names[cls_id]
             conf = obj.conf.detach().cpu().numpy()[0]
 
-            # Track the highest-confidence object for each class
+            if debug: print(f"Detected {cls_name} with confidence {conf:.2f}")
+
             if cls_id not in class_best or conf > class_best[cls_id]["conf"]:
                 class_best[cls_id] = {
                     "id": obj_id,
@@ -122,38 +133,33 @@ class KitchenObjectDetector:
                     "class_id": cls_id,
                     "class_name": cls_name,
                     "conf": conf,
+                    "last_seen": current_time
                 }
 
-            if tracking:
+        
+        # Step 2 (tracking only): Update tracked objects and remove stale objects
+        if tracking:
+            for obj in class_best.values():
+                if debug: print(f"Processing object {obj['id']}")
                 # Update the object in tracked objects
-                if obj_id in self.tracked_objects:
-                    self.tracked_objects[obj_id].update({
-                        "xywh": xywh,
-                        "last_seen": current_time,
-                        "class_id": cls_id,
-                        "class_name": cls_name,
-                        "conf": conf,
-                    })
+                if obj["id"] in self.tracked_objects.keys():
+                    if debug: print(f"Updating object {obj['id']}")
+                    self.tracked_objects[obj["id"]].update(obj)
                 elif conf > 0.8:
                     # Add new object if confidence threshold is met
-                    self.tracked_objects[obj_id] = {
-                        "xywh": xywh,
-                        "last_seen": current_time,
-                        "class_id": cls_id,
-                        "class_name": cls_name,
-                        "conf": conf,
-                    }
+                    if debug: print(f"Adding new object {obj['id']}")
+                    self.tracked_objects[obj["id"]] = obj
 
-        if tracking:
             # Remove stale objects
             expired_ids = [
                 obj_id for obj_id, data in self.tracked_objects.items()
                 if current_time - data["last_seen"] > self.time_buffer
             ]
+            if debug: print(f"Expired IDs: {expired_ids}")
             for obj_id in expired_ids:
                 del self.tracked_objects[obj_id]
 
-        # Convert class_best to final detected objects
-        detected_objects = list(class_best.values())
+        
+        detected_objects = list(self.tracked_objects.values()) if tracking else list(class_best.values())
 
         return detected_objects
