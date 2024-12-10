@@ -11,7 +11,7 @@ from amiga.drivers.cameras import ZEDCamera , CameraDriver, CameraParameters # D
 from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
 from amiga.vision import overlay_results
 from amiga.models import GraspingLightningModule
-from amiga.utils import save_rgb
+from amiga.utils import save_rgb, save_depth
 
 
 def grasp_from_shelf(
@@ -27,27 +27,17 @@ def grasp_from_shelf(
     res = robot.go_to_joint_positions_through_safe_point(joint_positions=q, wait=True)  
     if res != True: raise ValueError("Failed to move to overlook position") 
 
-    key = None
-    while key != "c":
-        key = input("Press 'c' to continue: ")
-        key = key.lower()
-
+    time.sleep(0.5)
 
     ################################## Detect object ###################################
     rgb, depth = camera.read()
     objs = detector(rgb, tracking=False)
+
+    # For debug
     save_rgb(rgb, path="latest_rgb.jpg")
-    sample_path = f'data/obj_det/{dt.datetime.now().strftime("%Y%m%d%H%M%S")}_rgb.png"'
-    save_rgb(rgb, path=sample_path)
-    # depth = np.clip(depth, 0, 3000)
-    # cv2.imwrite(
-    #   "latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8)
-    # )
+    save_depth(depth, path="latest_depth.jpg", max=3000)
     if len(objs) > 0: 
-        save_rgb(
-            overlay_results(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), objs), 
-            path="latest_objects.jpg"
-            )
+        save_rgb(overlay_results(rgb, objs), path="latest_objects.jpg")
 
     if obj_name is None:
         det_obj = [random.choice(objs)] 
@@ -61,28 +51,19 @@ def grasp_from_shelf(
     ################################ Compute 3D coords #################################
     x, y, w, h = det_obj[0]["xywh"]
     w, h = 0.9*w, 0.9*h  # make sure we get mostly the object
-    # print(f"Object bounding box: {x, y, w, h}")
-    # # Draw a red box around the object
-    # rgb[int(y-h/2):int(y+h/2),int(x-w/2):int(x+w/2)] = [255, 0, 0] 
-    # cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
     
     depth_box = depth[int(y - h / 2):int(y + h / 2), int(x - w / 2):int(x + w / 2)]
     obj_depth = np.median(depth_box)
-    # print(f"Object depth: {obj_depth}")
 
-    # Pixel space to 3D position in camera frame
+    # Pixel space to 3D position in camera frame; res is z forward, x up, y left
     obj_cam_coords = camera.uvdepth_to_xyz(u=int(x), v=int(y), depth=obj_depth)
-    # z forward, x up, y left
-    # print(f"Object coords in camera frame: {obj_cam_coords}")  
 
-    eef_pose = robot.get_observation()["ee_pose_euler"]  # X Y Z rX rY rZ
-    # print(f"EEF pose in base_link: {eef_pose}")  # x left, y back, z up
+    eef_pose = robot.get_observation()["ee_pose_euler"]  # x left, y back, z up
     bl_to_eef_tf = t3d.affines.compose(
         T=np.array([eef_pose[0], eef_pose[1], eef_pose[2]]),
         R=t3d.euler.euler2mat(eef_pose[3], eef_pose[4], eef_pose[5], axes='sxyz'),
         Z=np.array([1, 1, 1])
         )
-    # print(f"TF matrix BL -> EEF: \n{bl_to_eef_tf}")  # x forward, y left, z up
     
     eef_cam_trans, eef_cam_rot_mx = robot.get_camera_tf()
     eef_to_cam_tf = t3d.affines.compose(
@@ -90,7 +71,6 @@ def grasp_from_shelf(
         R=eef_cam_rot_mx,
         Z=np.array([1, 1, 1])
         )
-    # print(f"TF matrix EEF -> CAM: \n{eef_to_cam_tf}")  # x forward, y left, z up
 
     bl_to_cam_tf = np.dot(bl_to_eef_tf, eef_to_cam_tf)
 
@@ -100,7 +80,6 @@ def grasp_from_shelf(
     # Transform object's coordinates to base_link frame
     obj_bl_coords_h = np.dot(bl_to_cam_tf, obj_cam_coords_h)
     obj_bl_coords = obj_bl_coords_h[:3]  # Extract x, y, z from homogeneous coordinates
-    # print(f"Object coordinates in base_link frame: {obj_bl_coords}")
 
 
     ######################### Get a closer look of the object ##########################
@@ -135,6 +114,8 @@ def grasp_from_shelf(
 
     target_xyz = robot.get_observation()["ee_pose_euler"][:3]
 
+
+    ############################### Grasp and fall back ################################
     robot.close_gripper()
     time.sleep(2)
     robot.set_freedrive_mode(enable=False)
@@ -142,6 +123,8 @@ def grasp_from_shelf(
     fall_back_xyz[1] += 0.2
     fall_back_xyz[2] += 0.09
 
+    # We will also record the opposite demo (placing on the shelf)
+    # Since the object in the hand, we'll need to start from a tilted position
     default = t3d.euler.euler2quat(np.pi/2, -np.pi/4, 0.0, axes='sxyz')
     tilt_forward = t3d.euler.euler2quat(np.pi/12, -np.pi/12, 0.0, axes='rxyz')
     final_rot = t3d.quaternions.qmult(default, tilt_forward)
@@ -150,28 +133,30 @@ def grasp_from_shelf(
     fall_back_pose = np.append(fall_back_xyz, rpy)
     robot.go_to_eef_pose(eef_pose=fall_back_pose, wait=True)
 
-    rgb, depth = camera.read()
-    cv2.imwrite("latest_rgb.jpg",cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-    depth = np.clip(depth, 0, 1000)
-    cv2.imwrite("latest_depth.jpg", ((1 - depth / depth.max()) * 255).astype(np.uint8))
 
+    ######################## Record placing demo (opposite mvt) ########################
+    rgb, depth = camera.read()
+    save_rgb(rgb, path="latest_rgb.jpg")
+    save_depth(depth, path="latest_depth.jpg", max=1000)
+    
     key = None
     while key != "y" and key != "d":
         key = input("Press 'y' to save, 'd' to discard: ")
         key = key.lower()
     
     if key == "y":
-        sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
-        # Save initial images, position and target position
-        cv2.imwrite(f"data/grasp_shelf/{sample_id}_rgb.png", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-        np.save(f"data/grasp_shelf/{sample_id}_depth.npy", depth)
-        np.save(f"data/grasp_shelf/{sample_id}_init_xyz.npy", init_xyz)
-        np.save(f"data/grasp_shelf/{sample_id}_target_xyz.npy", target_xyz)
+        pass
+        # sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+        # # Save initial images, position and target position
+        # save_rgb(rgb, path=f"data/grasp_shelf/{sample_id}_rgb.png")
+        # np.save(f"data/grasp_shelf/{sample_id}_depth.npy", depth)
+        # np.save(f"data/grasp_shelf/{sample_id}_init_xyz.npy", init_xyz)
+        # np.save(f"data/grasp_shelf/{sample_id}_target_xyz.npy", target_xyz)
 
-        cv2.imwrite(f"data/put_on_shelf/{sample_id}_rgb.png", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-        np.save(f"data/put_on_shelf/{sample_id}_depth.npy", depth)
-        np.save(f"data/put_on_shelf/{sample_id}_init_xyz.npy", init_xyz)
-        np.save(f"data/put_on_shelf/{sample_id}_target_xyz.npy", target_xyz)
+        # save_rgb(rgb, path=f"data/put_on_shelf/{sample_id}_rgb.png")
+        # np.save(f"data/put_on_shelf/{sample_id}_depth.npy", depth)
+        # np.save(f"data/put_on_shelf/{sample_id}_init_xyz.npy", init_xyz)
+        # np.save(f"data/put_on_shelf/{sample_id}_target_xyz.npy", target_xyz)
 
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.open_gripper()

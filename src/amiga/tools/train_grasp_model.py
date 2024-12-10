@@ -22,9 +22,7 @@ def update_cfg_with_sweep_params(cfg):
     """
     sweep_config = wandb.config
     cfg.img_size = sweep_config.img_size
-    cfg.max_depth_mm = sweep_config.max_depth_mm
-    cfg.use_rgb = sweep_config.use_rgb
-    cfg.depth_backbone = sweep_config.depth_backbone
+    cfg.freeze_depth_backbone = sweep_config.freeze_depth_backbone
     cfg.learning_rate = sweep_config.learning_rate
     cfg.batch_size_train = sweep_config.batch_size_train
     cfg.optimizer = sweep_config.optimizer
@@ -34,7 +32,8 @@ def update_cfg_with_sweep_params(cfg):
 def main(cfg, is_sweep: bool = False):
     L.seed_everything(cfg.seed)
 
-    wandb.init()
+    wandb.init(project=cfg.wandb.project, dir=cfg.wandb.save_dir)
+
     if is_sweep:
         cfg = update_cfg_with_sweep_params(cfg)
 
@@ -100,6 +99,7 @@ def main(cfg, is_sweep: bool = False):
         log_every_n_steps=cfg.log_every_n_steps,
         logger=WandbLogger(**dict(cfg.wandb)),
         callbacks=callbacks,
+        default_root_dir=cfg.logs_dir,
     )
 
     trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
@@ -129,9 +129,7 @@ if __name__ == "__main__":
         "metric": {"goal": "minimize", "name": "val_loss"},
         "parameters": {
             "img_size": {"values": [224, 480]},
-            "max_depth_mm": {"values": [400, 600, 700]},
-            "use_rgb": {"values": [True, False]},
-            "depth_backbone": {"values": ["resnet18", "smallcnn"]},
+            "freeze_depth_backbone": {"values": [True, False]},
             "learning_rate": {"values": [1e-3, 1e-4, 1e-5]},
             "batch_size_train": {"values": [16, 32, 48]},
             "optimizer": {"values": ["adam", "adamw", "sgd"]},
@@ -139,5 +137,5 @@ if __name__ == "__main__":
     }
 
     sweep_id = wandb.sweep(sweep=sweep_configuration, project="amigrasp")
-    wandb.agent(sweep_id, function=lambda: main(cfg, is_sweep=True), count=500)
+    wandb.agent(sweep_id, function=lambda: main(cfg, is_sweep=True), count=60)
     

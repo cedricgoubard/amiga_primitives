@@ -122,7 +122,7 @@ train-grasp:
 		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.learning_grasp_params --cfg cfg/tools/grasp_params.yaml ${rob_flag}"
+		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.train_grasp_model --cfg cfg/tools/train_grasp.yaml ${rob_flag}"
 
 
 open-gripper: rob_flag=--open
