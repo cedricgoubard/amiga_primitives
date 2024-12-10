@@ -124,7 +124,7 @@ class AMIGA(ZMQBackendObject):
         self._use_gripper = cfg.use_gripper
         self.named_configs = {}
 
-        self.safe_point = np.array([0.0, -0.4, 0.2])  # mid height, from
+        self.safe_3d_position = np.array([0.0, -0.4, 0.2])  # mid height, from
         self.default_rpy = np.array([np.pi/2, -np.pi/4, 0.0])  # Gripper facing forward
 
         self._load_named_joint_cfgs()
@@ -157,7 +157,6 @@ class AMIGA(ZMQBackendObject):
 
         if not self.robot.isProgramRunning() and self.robot.isConnected():
             self._reload_ur_program_if_not_running()
-            
 
     def _load_named_joint_cfgs(self):
         """Load the named joint configurations from config file."""
@@ -253,6 +252,15 @@ class AMIGA(ZMQBackendObject):
 
         return joint_velocities
 
+    def _get_closest_safe_3d_position(self) -> np.ndarray:
+        eef_pose = self._get_eef_pose()
+        
+        safe_waypoint = self.safe_3d_position
+        if eef_pose[2] > 0.85: safe_waypoint[2] = 1.1  # High waypoint
+        else: safe_waypoint[2] = 0.3  # Low waypoint
+
+        return safe_waypoint
+
     def go_to_joint_positions(self, joint_positions: np.ndarray, wait: bool = False) -> None:
         """Command the leader robot to a given state.
 
@@ -269,30 +277,45 @@ class AMIGA(ZMQBackendObject):
         
         return True
     
-    def go_to_joint_positions_through_safe_point(self, joint_positions: np.ndarray, wait: bool = False) -> None:
+    def follow_joint_positions_path(self, path: List[np.ndarray], final_gripper_position: float = None, wait: bool = False) -> None:
         self._reload_ur_program_if_not_running()
         
         path_js = []
-  
-        # add safe waypoint
-        path_js += [np.concatenate([
-            self.robot.getInverseKinematics(
-                x=np.concatenate([self.safe_point, rpy2rv(*self.default_rpy)], axis=0),
-                qnear=self._get_joint_positions()[:6]),
-            [0.8, 1.4, 0.2]
-        ])]
-
-        path_js += [np.concatenate([joint_positions[:6], [0.8, 1.4, 0.0]], axis=0)]
+        for i in range(len(path)):
+            path_js += [np.concatenate([path[i], [0.8, 1.4, 0.3]], axis=0)]
+        
+        path_js[-1][-1] = 0.0
 
         if self._use_gripper:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
-            if len(joint_positions) > 6:
-                gripper_pos = joint_positions[6] * 255
+            if final_gripper_position is not None:
+                gripper_pos = final_gripper_position * 255
                 self.gripper.move(gripper_pos, 255, 10)
         else:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
 
         return True
+
+    def go_to_joint_positions_through_safe_point(self, joint_positions: np.ndarray, wait: bool = False) -> None:
+        path_js = []
+        wp = self._get_closest_safe_3d_position()
+  
+        # add safe waypoint
+        path_js += [np.concatenate([
+            self.robot.getInverseKinematics(
+                x=np.concatenate([wp, rpy2rv(*self.default_rpy)], axis=0),
+                qnear=self._get_joint_positions()[:6]),
+            [0.8, 1.4, 0.3]  # speed, acc, blend
+        ])]
+
+        path_js += [np.concatenate([joint_positions[:6], [0.8, 1.4, 0.0]], axis=0)]
+
+        if len(joint_positions) > 6 and self._use_gripper:
+            res = self.follow_joint_positions_path(path_js, joint_positions[-1], wait=(not wait))
+        else:
+            res = self.follow_joint_positions_path(path_js, wait=(not wait))
+
+        return res
 
     def go_to_eef_pose(self, eef_pose: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
         """Command the leader robot to a given state.
@@ -314,34 +337,22 @@ class AMIGA(ZMQBackendObject):
         else:
             self.robot.moveJ_IK(eef_pose, asynchronous=(not wait))
 
-    def go_to_eef_position_default_orientation(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
-        self._reload_ur_program_if_not_running()
-        
-        default_rpy = [np.pi/2, -np.pi/4, 0.0]  # Gripper facing forward
-        eef_pose = np.append(eef_position, rpy2rv(*default_rpy))
-        if self._use_gripper:
-            self.robot.moveJ_IK(pose=eef_pose[:6], asynchronous=(not wait))
-            if gripper_position is not None:
-                gripper_pos = gripper_position * 255
-                self.gripper.move(gripper_pos, 255, 10)
-        else:
-            self.robot.moveJ_IK(eef_pose, asynchronous=(not wait))
+    def go_to_eef_position_default_orientation(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:        
+        eef_pose = np.append(eef_position, self.default_rpy)
+        self.go_to_eef_pose(eef_pose, gripper_position, wait)
 
-    def follow_eef_position_path_default_orientation(self, path: List[np.ndarray], gripper_position: float = None, wait: bool = False) -> None:
+    def follow_eef_path(self, path: List[np.ndarray], gripper_position: float = None, wait: bool = False) -> None:
         self._reload_ur_program_if_not_running()
         
         path_js = []
-        prev_js = self._get_joint_positions()[:6]
+        qnear = self._get_joint_positions()[:6]
         for i in range(len(path)):
-            # add default orientation and speed, acc, blend
-            path_js += [self.robot.getInverseKinematics(
-                x=np.concatenate([path[i][:3], rpy2rv(*self.default_rpy)], axis=0),
-                qnear=prev_js,
-                )]
-            path_js[i] = np.append(path_js[i], [0.7, 1.3, 0.3])
-            prev_js = path_js[i][:6]
-
-        path_js[-1][-1] = 0.0  # No blending on last point
+            pose = np.concatenate([path[i,:3], rpy2rv(*path[i,3:6])], axis=0)
+            jpos = self.robot.getInverseKinematics(x=pose, qnear=qnear)
+            path_js += [np.append(jpos, [0.8, 1.4, 0.3])]
+            qnear = jpos
+        
+        path_js[-1][-1] = 0.0
 
         if self._use_gripper:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
@@ -350,7 +361,20 @@ class AMIGA(ZMQBackendObject):
                 self.gripper.move(gripper_pos, 255, 10)
         else:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
-        
+
+    def follow_eef_position_path_default_orientation(self, path: List[np.ndarray], gripper_position: float = None, wait: bool = False) -> None:
+        path = np.concatenate([
+            path, 
+            np.array([self.default_rpy]).repeat(len(path), axis=0)
+            ], axis=1)
+        print("Path 2: ", path)
+        return self.follow_eef_path(path, gripper_position, wait)
+
+    def go_to_eef_position_through_safe_point(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
+        wp = self._get_closest_safe_3d_position()
+        path = np.stack([wp, eef_position])
+        self.follow_eef_position_path_default_orientation(path, gripper_position, wait)
+
     def servo_joint_positions(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.
 
@@ -457,6 +481,9 @@ class AMIGA(ZMQBackendObject):
             "go_to_joint_positions_through_safe_point": ["joint_positions", "wait"],
             "go_to_eef_pose": ["eef_pose", "gripper_position", "wait"],
             "go_to_eef_position_default_orientation": ["eef_position", "gripper_position", "wait"],
+            "go_to_eef_position_through_safe_point": ["eef_position", "gripper_position", "wait"],
+            "follow_joint_positions_path": ["path", "final_gripper_position", "wait"],
+            "follow_eef_path": ["path", "gripper_position", "wait"],
             "follow_eef_position_path_default_orientation": ["path", "gripper_position", "wait"],
             "close_gripper": None,
             "open_gripper": None,
