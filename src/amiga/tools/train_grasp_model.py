@@ -21,15 +21,34 @@ def update_cfg_with_sweep_params(cfg):
     Updates the config with sweep parameters.
     """
     sweep_config = wandb.config
-    cfg.img_size = sweep_config.img_size
-    cfg.freeze_depth_backbone = sweep_config.freeze_depth_backbone
-    cfg.learning_rate = sweep_config.learning_rate
-    cfg.batch_size_train = sweep_config.batch_size_train
-    cfg.optimizer = sweep_config.optimizer
-    cfg.depth_backbone = sweep_config.depth_backbone
-    cfg.max_depth_mm = sweep_config.max_depth_mm
-    cfg.use_rgb = sweep_config.use_rgb
+    possible_keys = [
+        "img_size", "freeze_depth_backbone", "learning_rate", "batch_size_train", 
+        "optimizer", "depth_backbone", "max_depth_mm", "use_rgb"
+        ]
+    
+    for key in possible_keys:
+        if key in sweep_config.keys():
+            cfg[key] = sweep_config[key]
+
     return cfg
+
+
+def load_sweep_config(cfg: OmegaConf):
+    """Load the sweep configuration from the cfg."""
+    sweep_config = {
+        "method": cfg.sweep.method,
+        "metric": {
+            "goal": cfg.sweep.metric.goal,
+            "name": cfg.sweep.metric.name
+        },
+        "parameters": {}
+    }
+
+    # Dynamically load parameters for the sweep
+    for param, values in cfg.sweep.parameters.items():
+        sweep_config["parameters"][param] = {"values": list(values)}
+
+    return sweep_config
 
 
 def main(cfg, is_sweep: bool = False):
@@ -66,6 +85,12 @@ def main(cfg, is_sweep: bool = False):
     stats["depth"]["std"] /= len(train_dataset)
     stats["dx_dy_dz"]["std"] = torch.stack(stats["dx_dy_dz"]["mean"]).std(dim=0)
     stats["dx_dy_dz"]["mean"] = torch.stack(stats["dx_dy_dz"]["mean"]).mean(dim=0)
+
+    print(
+        "Stats:\n"
+        f"Depth: mean={stats['depth']['mean']:.2f}, std={stats['depth']['std']:.2f}\n"
+        f"dx_dy_dz: mean={stats['dx_dy_dz']['mean']}, std={stats['dx_dy_dz']['std']}"
+    )
    
     train_dataloader = DataLoader(
         train_dataset,
@@ -126,22 +151,10 @@ if __name__ == "__main__":
     # main(cfg, is_sweep=False)
 
     # For sweeping
+    assert "sweep" in cfg.keys(), "Sweep configuration is missing in the config file"
     wandb.login()
-    sweep_configuration = {
-        "method": "random",
-        "metric": {"goal": "minimize", "name": "val_loss"},
-        "parameters": {
-            "img_size": {"values": [224, 480]},
-            "depth_backbone": {"values": ["resnet18", "smallcnn"]},
-            "max_depth_mm": {"values": [350, 700]},
-            "use_rgb": {"values": [True, False]},
-            "freeze_depth_backbone": {"values": [True, False]},
-            "learning_rate": {"values": [1e-3, 1e-4, 1e-5]},
-            "batch_size_train": {"values": [20, 30, 40]},
-            "optimizer": {"values": ["adam", "adamw", "sgd"]},
-        },
-    }
 
+    # Load the sweep configuration from cfg
+    sweep_configuration = load_sweep_config(cfg)
     sweep_id = wandb.sweep(sweep=sweep_configuration, project=cfg.wandb.project)
-    wandb.agent(sweep_id, function=lambda: main(cfg, is_sweep=True), count=60)
-    
+    wandb.agent(sweep_id, function=lambda: main(cfg, is_sweep=True), count=cfg.sweep.count)

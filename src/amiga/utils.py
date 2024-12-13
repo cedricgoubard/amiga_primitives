@@ -84,12 +84,18 @@ def save_depth(depth, path: str = None, max=None):
     cv2.imwrite(path, ((1 - depth / depth.max()) * 255).astype(np.uint8))
 
 
-def create_grid_img(imgs):
+def create_grid_img(imgs: np.ndarray) -> np.ndarray:
     """Creates a grid of up to 3x3 images from a list of images."""
+    assert isinstance(imgs, np.ndarray), f"Images should be a numpy array, got {type(imgs)}"
+    assert not np.isnan(imgs).any(), "Images should not contain NaN values"
+
+    if imgs.max() > 255:  # Depth image
+        imgs = imgs / (imgs.max() + 0.0001)  # 0.0001 to trigger the next condition
+
     if imgs.max() <= 1:
         imgs = np.clip((imgs * 255.0), 0, 255).astype(np.uint8)
 
-    if imgs.shape[1] == 3:
+    if imgs.shape[1] in [1, 3]:  # Channels for rgb or depth
         imgs = rearrange(imgs, 'b c h w -> b h w c')
     
     imgs = imgs[: min(9, len(imgs))]

@@ -233,3 +233,11 @@ build-torch: .build-base
 
 build-localuser: .build-base
 	@docker build -f dockerfiles/Dockerfile.localuser -t ${project-name}-user:latest --build-arg USERNAME=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
+
+
+########################################################################################
+##################################### MISC COMMANDS ####################################
+########################################################################################
+
+pull-data-amigo:
+	@rsync -avz --ignore-existing  -e "ssh -i ~/.ssh/id_ed25519_git" amigo@10.0.0.163:/home/amigo/cedric/amiga_primitives/data/ ${current_dir}/data/

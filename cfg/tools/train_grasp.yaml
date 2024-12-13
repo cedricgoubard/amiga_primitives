@@ -6,21 +6,21 @@ seed: 1006
 img_size: 640
 max_depth_mm: 700
 
-use_rgb: false
+use_rgb: true
 rgb_backbone: resnet18  # resnet18 or smallcnn
 freeze_rgb_backbone: false
 
 # No reason for these to change too much
 use_depth: true
-depth_backbone: resnet18  # resnet18 or smallcnn
+depth_backbone: smallcnn  # resnet18 or smallcnn
 freeze_depth_backbone: false
 
 train_ratio: 0.75
 max_epochs: 7000
 log_every_n_steps: 1
 learning_rate: 0.002
-batch_size_train: 45
-batch_size_val: 30
+batch_size_train: 57
+batch_size_val: 57
 optimizer: adam  # adam, sgd, adamw
 
 early_stopping:
@@ -40,3 +40,19 @@ wandb:
   config: {}
   save_dir: ${logs_dir}
   log_model: true
+
+sweep:
+  method: "random"
+  metric:
+    goal: "minimize"
+    name: "val_loss"
+  parameters:
+    img_size: [224, 480, 640]
+    depth_backbone: ["resnet18", "smallcnn"]
+    max_depth_mm: [550, 800]
+    use_rgb: [true, false]
+    freeze_depth_backbone: [true, false]
+    learning_rate: [0.001, 0.0001, 0.00001]
+    # batch_size_train: [50]
+    optimizer: ["adam", "adamw"]
+  count: 350
