@@ -1,7 +1,10 @@
 import argparse
 import time
+import os
+import glob
 
 import cv2
+import numpy as np
 from omegaconf import OmegaConf
 
 
@@ -12,11 +15,7 @@ def Dev(cfg: OmegaConf):
     from amiga.vision import KitchenObjectDetector, overlay_results
     from amiga.drivers.cameras import ZEDCamera  # DO NOT REMOVE, used at eval
     from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
-    from amiga.primitives.grasp_shelf import grasp_from_shelf
-    from amiga.models import GraspingLightningModule
-
-    # Create Object detector
-    obj_det_mdl = KitchenObjectDetector(cfg.yolo_weights, time_buffer_sec=1.1)
+    from amiga.primitives.handover import handover
 
     # Make camera client
     cam_backend = eval(cfg.cam_zmq.class_name)(cfg.cam_zmq)
@@ -35,20 +34,23 @@ def Dev(cfg: OmegaConf):
 
     # Make robot client
     rob_backend = eval(cfg.robot_zmq.class_name)(cfg.robot_zmq)
-    robot = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
-
-    # Load grasping model
-    grasp_mdl = GraspingLightningModule.load_from_checkpoint(cfg.grasp_mdl_ckpt_path)
+    robot: AMIGA = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
 
     stop = False
     while not stop:
         try:
-            grasp_from_shelf(
-                detector=obj_det_mdl,
-                camera=camera, 
-                robot=robot, 
-                grasp_module=grasp_mdl
-                )
+            position = np.random.rand(3)
+            position[0] = position[0] * 0.6 - 0.3
+            position[1] = -1 * (position[1] * 0.1 + 0.5)
+            position[2] = (position[2] * 0.9) - 0.2
+            print(f"Moving to {position}")
+            robot.go_to_eef_position_through_safe_point(eef_position=position, wait=True)
+            handover(camera, robot)
+
+            # Go back to high point
+            position = np.array([0.0, -0.4, 0.8])
+            robot.go_to_eef_position_default_orientation(eef_position=position, wait=True)
+
         except KeyboardInterrupt:
             stop = True
     
