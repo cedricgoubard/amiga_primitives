@@ -9,6 +9,8 @@ import torchvision.transforms.v2 as T
 import pytorch_lightning as L
 import wandb
 from jaxtyping import Float
+import numpy as np
+from einops import rearrange
 
 from amiga.utils import create_grid_img
 
@@ -133,11 +135,14 @@ class GraspingModel(nn.Module):
 class GraspingLightningModule(L.LightningModule):
     def __init__(self, cfg: OmegaConf, stats=None):
         super(GraspingLightningModule, self).__init__()
+        if isinstance(cfg, dict):
+            cfg = OmegaConf.create(cfg)
+
         if stats is None: 
             print("Stats not provided, using default values")
             stats = {
-                'depth': {'mean': torch.tensor(0.8479), 'std': torch.tensor(0.2752)}, 
-                'dx_dy_dz': {'mean': torch.tensor([-0.0279, -0.1569, -0.0450]), 'std': torch.tensor([0.0127, 0.0309, 0.0187])}
+                'depth': {'mean': torch.tensor(0.8930), 'std': torch.tensor(0.1611)}, 
+                'dx_dy_dz': {'mean': torch.tensor([-0.0386, -0.3643, -0.1164]), 'std': torch.tensor([0.0265, 0.1136, 0.0413])}
                 }
         self.stats = stats
        
@@ -207,6 +212,59 @@ class GraspingLightningModule(L.LightningModule):
             self._val_sample_is_saved = True
 
         loss = self.compute_loss(batch, step="val")
+
+    def _ensure_rgb_is_tensor_and_dims(self, rgb):
+        if isinstance(rgb, np.ndarray): rgb = torch.from_numpy(rgb).to(self.device)
+        assert rgb.dim() in [3, 4], f"RGB image should have 3 or 4 dimensions, got {rgb.shape}"
+        if rgb.dim() == 3: 
+            rgb = rgb.unsqueeze(0)
+
+        if rgb.shape[-1] == 3:
+            rgb = rearrange(rgb, "B H W C -> B C H W")
+        
+        return rgb.float()
+    
+    def _ensure_depth_is_tensor_and_dims(self, depth):
+        if isinstance(depth, np.ndarray): depth = torch.from_numpy(depth).to(self.device)
+        assert depth.dim() in [2, 3, 4], f"Depth image should have 2 to 4 dimensions, got {depth.shape}"
+        if depth.dim() == 2: 
+            depth = depth.unsqueeze(0).unsqueeze(0)  # Add batch and channel
+        
+        elif depth.dim() == 3:
+            # H W 1
+            if depth.shape[-1] == 1:
+                depth = rearrange(depth, "H W C -> 1 C H W")
+
+            # B H W
+            elif depth.shape[0] != 1 and depth.shape[-1] != 1:
+                depth = rearrange(depth, "B H W -> B 1 H W")
+
+            # 1 H W
+            elif depth.shape[0] == 1:
+                depth = rearrange(depth, "B H W -> B 1 H W")
+
+            else:
+                raise ValueError(f"Unknown depth shape {depth.shape}")
+                    
+        return depth.float()
+
+    def pred_dx_dy_dz(self, rgb, depth) -> Float[np.ndarray, "3"]:
+        """
+        Predict dx, dy, dz from RGB and depth images.
+        """
+        rgb = self._ensure_rgb_is_tensor_and_dims(rgb)
+        depth = self._ensure_depth_is_tensor_and_dims(depth)
+        
+        self.model.eval()
+        with torch.no_grad():
+            pred = self.forward(rgb, depth)
+
+        # Unnormalise predictions
+        pred = pred * self.stats["dx_dy_dz"]["std"].to(self.device) + self.stats["dx_dy_dz"]["mean"].to(self.device)
+
+        pred = pred.cpu().numpy()[0]
+
+        return pred
 
     def compute_loss(self, batch, step):
         rgb, depth, target = batch["rgb"], batch["depth"], batch["dx_dy_dz"]

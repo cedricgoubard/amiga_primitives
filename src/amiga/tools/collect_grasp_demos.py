@@ -6,11 +6,13 @@ from omegaconf import OmegaConf
 import numpy as np
 import datetime as dt
 import transforms3d as t3d
+import cv2
 
 from amiga.vision import KitchenObjectDetector, overlay_results
 from amiga.drivers.cameras import ZEDCamera, CameraDriver  # DO NOT REMOVE, used at eval
 from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
 from amiga.utils import save_rgb, save_depth
+from amiga.models import GraspingLightningModule
 
 
 def collect_grasp_demo(
@@ -18,18 +20,13 @@ def collect_grasp_demo(
         camera: CameraDriver, 
         robot: AMIGA,
         obj_name: str = None, 
+        grasp_module: GraspingLightningModule = None
         ):
     
     ############################ Move to overlook position #############################
     q = robot.get_named_joints_cfg(name="overlook")
     res = robot.go_to_joint_positions_through_safe_point(joint_positions=q, wait=True)  
     if res != True: raise ValueError("Failed to move to overlook position") 
-
-    key = None
-    while key != "c":
-        key = input("Press 'c' to continue: ")
-        key = key.lower()
-
 
     ################################## Detect object ###################################
     rgb, depth = camera.read()
@@ -87,38 +84,52 @@ def collect_grasp_demo(
     obj_bl_coords_h = np.dot(bl_to_cam_tf, obj_cam_coords_h)
     obj_bl_coords = obj_bl_coords_h[:3]  # Extract x, y, z from homogeneous coordinates
 
-
     ######################### Get a closer look of the object ##########################
     target = obj_bl_coords
-    offset = random.uniform(0.35, 0.50)
-    target[1] += offset  # offset in y (backwards)
-    target[2] += 0.06  # offset in z (upwards)
-
+    offset_y = random.uniform(0.35, 0.50)
+    offset_z = random.uniform(0.05, 0.08)
+    target[1] += offset_y  # offset in y (backwards)
+    target[2] += offset_z  # offset in z (upwards)
     robot.go_to_eef_position_through_safe_point(eef_position=target, wait=True)
-    
+    time.sleep(1.0)
     init_xyz = robot.get_observation()["ee_pose_euler"][:3]
-    rgb, depth = camera.read()
+    rgb_pre_grasp, depth_pre_grasp = camera.read()
 
 
     ################################### Collect demo ###################################
-    time.sleep(1)
-    robot.set_freedrive_mode(enable=True)
+    if grasp_mdl is None:
+        time.sleep(1)
+        robot.set_freedrive_mode(enable=True)
 
-    key = None
-    while key != "c":
-        key = input("Press 'c' to continue: ")
-        key = key.lower()
+        key = None
+        while key != "c":
+            key = input("Press 'c' to continue: ")
+            key = key.lower()
 
-    target_xyz = robot.get_observation()["ee_pose_euler"][:3]
+    else:
+        rgb = cv2.resize(rgb_pre_grasp, (grasp_module.cfg.img_size, grasp_module.cfg.img_size))
+        depth = cv2.resize(depth_pre_grasp, (grasp_module.cfg.img_size, grasp_module.cfg.img_size))
 
+        rgb = (rgb / 255.0)
+        depth = np.clip(depth, 0, grasp_module.cfg.max_depth_mm) / grasp_module.cfg.max_depth_mm
+
+        res = grasp_module.pred_dx_dy_dz(rgb, depth)
+        target_xyz = init_xyz + res
+        target_xyz[1] += 0.13  # offset in y (backwards)
+        target_xyz[2] += 0.07  # offset in z (upwards)
+
+        robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
+        
 
     ############################### Grasp and fall back ################################
     robot.close_gripper()
     time.sleep(2)
-    robot.set_freedrive_mode(enable=False)
+    if grasp_mdl is None: 
+        target_xyz = robot.get_observation()["ee_pose_euler"][:3]
+        robot.set_freedrive_mode(enable=False)
     fall_back_xyz = init_xyz
-    fall_back_xyz[1] += 0.2
-    fall_back_xyz[2] += 0.09
+    fall_back_xyz[1] += 0.1
+    fall_back_xyz[2] += 0.1
 
     # We will also record the opposite demo (placing on the shelf)
     # Since the object in the hand, we'll need to start from a tilted position
@@ -132,9 +143,9 @@ def collect_grasp_demo(
 
 
     ######################## Record placing demo (opposite mvt) ########################
-    rgb, depth = camera.read()
-    save_rgb(rgb, path="latest_rgb.jpg")
-    save_depth(depth, path="latest_depth.jpg", max=1000)
+    rgb_pre_place, depth_pre_place = camera.read()
+    save_rgb(rgb_pre_place, path="latest_rgb.jpg")
+    save_depth(depth_pre_place, path="latest_depth.jpg", max=1000)
     
     key = None
     while key != "y" and key != "d":
@@ -142,23 +153,22 @@ def collect_grasp_demo(
         key = key.lower()
     
     if key == "y":
-        pass
         sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         # Save initial images, position and target position
-        save_rgb(rgb, path=f"data/grasp_shelf/{sample_id}_rgb.png")
-        np.save(f"data/grasp_shelf/{sample_id}_depth.npy", depth)
-        np.save(f"data/grasp_shelf/{sample_id}_init_xyz.npy", init_xyz)
-        np.save(f"data/grasp_shelf/{sample_id}_target_xyz.npy", target_xyz)
+        save_rgb(rgb_pre_grasp, path=f"data/grasp_shelf_clean/{sample_id}_rgb.png")
+        np.save(f"data/grasp_shelf_clean/{sample_id}_depth.npy", depth_pre_grasp)
+        np.save(f"data/grasp_shelf_clean/{sample_id}_init_xyz.npy", init_xyz)
+        np.save(f"data/grasp_shelf_clean/{sample_id}_target_xyz.npy", target_xyz)
 
-        save_rgb(rgb, path=f"data/put_on_shelf/{sample_id}_rgb.png")
-        np.save(f"data/put_on_shelf/{sample_id}_depth.npy", depth)
-        np.save(f"data/put_on_shelf/{sample_id}_init_xyz.npy", init_xyz)
-        np.save(f"data/put_on_shelf/{sample_id}_target_xyz.npy", target_xyz)
+        save_rgb(rgb_pre_place, path=f"data/place_shelf_clean/{sample_id}_rgb.png")
+        np.save(f"data/place_shelf_clean/{sample_id}_depth.npy", depth_pre_place)
+        np.save(f"data/place_shelf_clean/{sample_id}_init_xyz.npy", fall_back_xyz)
+        np.save(f"data/place_shelf_clean/{sample_id}_target_xyz.npy", target_xyz)
 
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.open_gripper()
     time.sleep(1.0)
-    robot.go_to_eef_position_default_orientation(eef_position=init_xyz, wait=True)
+    robot.go_to_eef_position_default_orientation(eef_position=fall_back_xyz, wait=True)
 
 
 
@@ -193,10 +203,15 @@ if __name__ == "__main__":
     rob_backend = eval(cfg.robot_zmq.class_name)(cfg.robot_zmq)
     robot = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
 
+    grasp_mdl = None
+    if "grasp_mdl_ckpt_path" in cfg.keys() and cfg.grasp_mdl_ckpt_path is not None:
+        # Load grasping model
+        grasp_mdl = GraspingLightningModule.load_from_checkpoint(cfg.grasp_mdl_ckpt_path)
+
     stop = False
     while not stop:
         try:
-            collect_grasp_demo(mdl, camera, robot)
+            collect_grasp_demo(mdl, camera, robot, grasp_module=grasp_mdl)
         except KeyboardInterrupt:
             stop = True
     

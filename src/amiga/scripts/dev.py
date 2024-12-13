@@ -13,9 +13,10 @@ def Dev(cfg: OmegaConf):
     from amiga.drivers.cameras import ZEDCamera  # DO NOT REMOVE, used at eval
     from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
     from amiga.primitives.grasp_shelf import grasp_from_shelf
+    from amiga.models import GraspingLightningModule
 
     # Create Object detector
-    mdl = KitchenObjectDetector(cfg.yolo_weights, time_buffer_sec=1.1)
+    obj_det_mdl = KitchenObjectDetector(cfg.yolo_weights, time_buffer_sec=1.1)
 
     # Make camera client
     cam_backend = eval(cfg.cam_zmq.class_name)(cfg.cam_zmq)
@@ -36,10 +37,18 @@ def Dev(cfg: OmegaConf):
     rob_backend = eval(cfg.robot_zmq.class_name)(cfg.robot_zmq)
     robot = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
 
+    # Load grasping model
+    grasp_mdl = GraspingLightningModule.load_from_checkpoint(cfg.grasp_mdl_ckpt_path)
+
     stop = False
     while not stop:
         try:
-            grasp_from_shelf(mdl, camera, robot)
+            grasp_from_shelf(
+                detector=obj_det_mdl,
+                camera=camera, 
+                robot=robot, 
+                grasp_module=grasp_mdl
+                )
         except KeyboardInterrupt:
             stop = True
     

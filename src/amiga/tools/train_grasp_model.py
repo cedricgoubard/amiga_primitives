@@ -26,6 +26,9 @@ def update_cfg_with_sweep_params(cfg):
     cfg.learning_rate = sweep_config.learning_rate
     cfg.batch_size_train = sweep_config.batch_size_train
     cfg.optimizer = sweep_config.optimizer
+    cfg.depth_backbone = sweep_config.depth_backbone
+    cfg.max_depth_mm = sweep_config.max_depth_mm
+    cfg.use_rgb = sweep_config.use_rgb
     return cfg
 
 
@@ -129,13 +132,16 @@ if __name__ == "__main__":
         "metric": {"goal": "minimize", "name": "val_loss"},
         "parameters": {
             "img_size": {"values": [224, 480]},
+            "depth_backbone": {"values": ["resnet18", "smallcnn"]},
+            "max_depth_mm": {"values": [350, 700]},
+            "use_rgb": {"values": [True, False]},
             "freeze_depth_backbone": {"values": [True, False]},
             "learning_rate": {"values": [1e-3, 1e-4, 1e-5]},
-            "batch_size_train": {"values": [16, 32, 48]},
+            "batch_size_train": {"values": [20, 30, 40]},
             "optimizer": {"values": ["adam", "adamw", "sgd"]},
         },
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="amigrasp")
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project=cfg.wandb.project)
     wandb.agent(sweep_id, function=lambda: main(cfg, is_sweep=True), count=60)
     

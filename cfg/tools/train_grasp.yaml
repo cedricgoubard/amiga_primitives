@@ -1,4 +1,4 @@
-data_dir: data/grasp_shelf/
+data_dir: data/grasp_shelf_clean/
 logs_dir: logs/${now}  # "now" has to be created in python code
 
 seed: 1006
@@ -19,8 +19,8 @@ train_ratio: 0.75
 max_epochs: 7000
 log_every_n_steps: 1
 learning_rate: 0.002
-batch_size_train: 84
-batch_size_val: 42
+batch_size_train: 45
+batch_size_val: 30
 optimizer: adam  # adam, sgd, adamw
 
 early_stopping:
@@ -36,7 +36,7 @@ mdl_ckpt:
   # every_n_train_steps: 2000
 
 wandb:
-  project: "amigrasp"
+  project: "amigrasp_clean"
   config: {}
   save_dir: ${logs_dir}
   log_model: true

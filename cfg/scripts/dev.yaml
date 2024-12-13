@@ -13,3 +13,6 @@ cam_zmq:
   async_client: true
 
 yolo_weights: resources/models/241209_yolov11s_datav6_mAP50=0.918.pt
+grasp_mdl_ckpt_path: logs/2024-12-11_08-55-35/checkpoints/epoch=680-val_loss=0.20.ckpt
+# logs/2024-12-11_08-55-35/checkpoints/epoch=680-val_loss=0.20.ckpt
+#  logs/2024-12-11_10-34-50/checkpoints/epoch=19-val_loss=0.28.ckpt

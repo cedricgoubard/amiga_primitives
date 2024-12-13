@@ -61,12 +61,31 @@ collect-grasp-demo:
 		--runtime=nvidia \
 		--rm \
 		--privileged \
-		--name ${project-name}-dev \
+		--name ${project-name}-grasp-collect \
 		--net=host \
 		-v ${current_dir}:/amiga \
+		-v ${current_dir}/resources/cache:/home/${USER}/.cache \
+		-v ${current_dir}/resources/.bash_history:/home/${USER}/.bash_history \
+		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
 		--user ${UID}:${GID} \
 		-it \
 		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
+
+run-dev:
+	@docker run \
+		--runtime=nvidia \
+		--rm \
+		--privileged \
+		--name ${project-name}-dev \
+		--net=host \
+		-v ${current_dir}:/amiga \
+		-v ${current_dir}/resources/cache:/home/${USER}/.cache \
+		-v ${current_dir}/resources/.bash_history:/home/${USER}/.bash_history \
+		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
+		--user ${UID}:${GID} \
+		-it \
+		${project-name}-torch bash -c "pip install -e . && python -m amiga --script --cfg cfg/scripts/dev.yaml"
+
 
 run-realsense:
 	@docker run \
@@ -93,7 +112,7 @@ run-handeye:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml
+		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml"
 
 
 .robot_tool:
@@ -131,11 +150,11 @@ open-gripper: .robot_tool
 close-gripper: rob_flag=--close
 close-gripper: .robot_tool
 
-freeddrive-on: rob_flag=--freedrive
-freeddrive-on: .robot_tool
+freedrive-on: rob_flag=--freedrive
+freedrive-on: .robot_tool
 
-freeddrive-off: rob_flag=--no-freedrive
-freeddrive-off: .robot_tool
+freedrive-off: rob_flag=--no-freedrive
+freedrive-off: .robot_tool
 
 home: rob_flag=--home
 home: .robot_tool
@@ -145,6 +164,15 @@ stop:
 	@docker stop ${project-name}-zed 2> /dev/null || true
 	@docker stop ${project-name}-amiga 2> /dev/null || true
 	@docker stop ${project-name}-rs 2> /dev/null || true
+	@docker stop ${project-name}-torch 2> /dev/null || true
+	@docker stop ${project-name}-user 2> /dev/null || true
+	@docker stop ${project-name}-tools 2> /dev/null || true
+	@docker stop ${project-name}-handeye 2> /dev/null || true
+	@docker stop ${project-name}-gripper 2> /dev/null || true
+	@docker stop ${project-name}-train-grasp 2> /dev/null || true
+	@docker stop ${project-name}-train-grasp2 2> /dev/null || true
+	@docker stop ${project-name}-grasp-collect 2> /dev/null || true
+	@docker stop ${project-name}-dev 2> /dev/null || true
 
 exec-amiga:
 	docker exec -it ${project-name}-amiga bash
