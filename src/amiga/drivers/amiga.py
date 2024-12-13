@@ -125,7 +125,8 @@ class AMIGA(ZMQBackendObject):
         self._use_gripper = cfg.use_gripper
         self.named_configs = {}
 
-        self.safe_3d_position = np.array([0.0, -0.5, 0.2])  # mid height, from
+        self.safe_3d_position_low = np.array([0.0, -0.5, 0.2])  
+        self.safe_3d_position_high = np.array([0.0, -0.4, 0.7])
         self.default_rpy = np.array([np.pi/2, -np.pi/4, 0.0])  # Gripper facing forward
 
         self._load_named_joint_cfgs()
@@ -179,6 +180,11 @@ class AMIGA(ZMQBackendObject):
         if self._use_gripper:
             return cfg
         return cfg[:6]
+
+    def get_named_eef_position(self, name: str) -> np.ndarray:
+        if name == "low_wp": return self.safe_3d_position_low
+        elif name == "high_wp": return self.safe_3d_position_high
+        else: raise ValueError(f"Named eef position {name} not found")
 
     def get_num_dofs(self) -> int:
         """Get the number of joints of the robot.
@@ -253,15 +259,13 @@ class AMIGA(ZMQBackendObject):
 
         return joint_velocities
 
-    def _get_closest_safe_3d_position(self) -> np.ndarray:
+    def get_closest_safe_3d_position(self) -> np.ndarray:
         eef_pose = self._get_eef_pose()
         
-        safe_waypoint = self.safe_3d_position
         if eef_pose[2] > 0.3: 
-            safe_waypoint[1] = -0.4  # High waypoint
-            safe_waypoint[2] = 0.7  # High waypoint
+            safe_waypoint = self.safe_3d_position_high
         else: 
-            safe_waypoint[2] = 0.2  # Low waypoint
+            safe_waypoint = self.safe_3d_position_low
 
         return safe_waypoint
 
@@ -302,7 +306,7 @@ class AMIGA(ZMQBackendObject):
 
     def go_to_joint_positions_through_safe_point(self, joint_positions: np.ndarray, wait: bool = False) -> None:
         path_js = []
-        wp = self._get_closest_safe_3d_position()
+        wp = self.get_closest_safe_3d_position()
   
         # add safe waypoint
         path_js += [np.concatenate([
@@ -377,7 +381,7 @@ class AMIGA(ZMQBackendObject):
         return self.follow_eef_path(path, gripper_position, wait, blend)
 
     def go_to_eef_position_through_safe_point(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
-        wp = self._get_closest_safe_3d_position()
+        wp = self.get_closest_safe_3d_position()
         path = np.stack([wp, eef_position])
         self.follow_eef_position_path_default_orientation(path, gripper_position, wait, blend=[0.3, 0.0])
 
@@ -432,7 +436,7 @@ class AMIGA(ZMQBackendObject):
         """
         return self._free_drive
 
-    def set_freedrive_mode(self, enable: bool) -> None:
+    def set_freedrive_mode(self, enable: bool, axes: List = None) -> None:
         """Set the freedrive mode of the robot.
 
         Args:
@@ -441,7 +445,8 @@ class AMIGA(ZMQBackendObject):
         self._reload_ur_program_if_not_running()
         if enable and not self._free_drive:
             self._free_drive = True
-            self.robot.freedriveMode(free_axes=[1, 1, 1, 0, 0, 0])
+            if axes is None: axes = [1, 1, 1, 1, 1, 1]
+            self.robot.freedriveMode(free_axes=axes)
             # self.robot.freedriveMode()
         elif not enable and self._free_drive:
             self._free_drive = False
@@ -481,7 +486,7 @@ class AMIGA(ZMQBackendObject):
             "get_named_joints_cfg": ["name"],
             "get_observation": None,
             "is_freedrive_enabled": None,
-            "set_freedrive_mode": ["enable"],
+            "set_freedrive_mode": ["enable", "axes"],
             "servo_joint_positions": ["joint_state"],
             "servo_eef_pose_and_gripper": ["pose_and_gripper_angle"],
             "go_to_joint_positions": ["joint_positions", "wait"],
@@ -495,4 +500,6 @@ class AMIGA(ZMQBackendObject):
             "close_gripper": None,
             "open_gripper": None,
             "get_camera_tf": None,
+            "get_closest_safe_3d_position": None,
+            "get_named_eef_position": ["name"],
         }

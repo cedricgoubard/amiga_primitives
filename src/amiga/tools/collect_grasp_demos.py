@@ -90,7 +90,14 @@ def collect_grasp_demo(
     offset_z = random.uniform(0.05, 0.08)
     target[1] += offset_y  # offset in y (backwards)
     target[2] += offset_z  # offset in z (upwards)
-    robot.go_to_eef_position_through_safe_point(eef_position=target, wait=True)
+
+    if target[2] < 0.4:
+        wp = robot.get_named_eef_position(name="low_wp")
+    else:
+        wp = robot.get_named_eef_position(name="high_wp")
+    
+
+    robot.follow_eef_position_path_default_orientation(path=[wp, target], wait=True, blend=[0.1, 0.0])
     time.sleep(1.0)
     init_xyz = robot.get_observation()["ee_pose_euler"][:3]
     rgb_pre_grasp, depth_pre_grasp = camera.read()
@@ -99,7 +106,7 @@ def collect_grasp_demo(
     ################################### Collect demo ###################################
     if grasp_mdl is None:
         time.sleep(1)
-        robot.set_freedrive_mode(enable=True)
+        robot.set_freedrive_mode(enable=True, axes=[1, 1, 1, 0, 0, 0])
 
         key = None
         while key != "c":
@@ -127,8 +134,8 @@ def collect_grasp_demo(
     if grasp_mdl is None: 
         target_xyz = robot.get_observation()["ee_pose_euler"][:3]
         robot.set_freedrive_mode(enable=False)
-    fall_back_xyz = init_xyz
-    fall_back_xyz[1] += 0.1
+    fall_back_xyz = target_xyz.copy()
+    fall_back_xyz[1] += 0.3
     fall_back_xyz[2] += 0.1
 
     # We will also record the opposite demo (placing on the shelf)
