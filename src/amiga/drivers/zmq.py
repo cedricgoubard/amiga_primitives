@@ -72,14 +72,14 @@ class SyncZMQClient(BaseZMQClient):
                     self._socket.send(pickle.dumps(request))
                     res = pickle.loads(self._socket.recv())
                     if isinstance(res, dict) and "error" in res:
-                        print(f"Error: {res['error']}")
+                        print(f"Error in {name}({kwargs}): {res['error']}")
                     return res
             else:
                 request = {"method": name, "args": kwargs}
                 self._socket.send(pickle.dumps(request))
                 res = pickle.loads(self._socket.recv())
                 if isinstance(res, dict) and "error" in res:
-                    print(f"Error: {res['error']}")
+                    print(f"Error in {name}({kwargs}): {res['error']}")
                 return res
                 
 

@@ -1,7 +1,10 @@
 import argparse
 import time
+import os
+import glob
 
 import cv2
+import numpy as np
 from omegaconf import OmegaConf
 
 
@@ -12,11 +15,9 @@ def Dev(cfg: OmegaConf):
     from amiga.vision import KitchenObjectDetector, overlay_results
     from amiga.drivers.cameras import ZEDCamera  # DO NOT REMOVE, used at eval
     from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
+    from amiga.primitives.handover import handover
     from amiga.primitives.grasp_shelf import grasp_from_shelf
     from amiga.models import GraspingLightningModule
-
-    # Create Object detector
-    obj_det_mdl = KitchenObjectDetector(cfg.yolo_weights, time_buffer_sec=1.1)
 
     # Make camera client
     cam_backend = eval(cfg.cam_zmq.class_name)(cfg.cam_zmq)
@@ -33,22 +34,56 @@ def Dev(cfg: OmegaConf):
         time.sleep(0.1)
     print(f"Got image; moving on...")
 
+    detector = KitchenObjectDetector(cfg.yolo_weights, time_buffer_sec=1.1)
+
     # Make robot client
     rob_backend = eval(cfg.robot_zmq.class_name)(cfg.robot_zmq)
-    robot = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
+    robot: AMIGA = rob_backend.make_zmq_client(cfg.robot_zmq.port, cfg.robot_zmq.host)
 
-    # Load grasping model
     grasp_mdl = GraspingLightningModule.load_from_checkpoint(cfg.grasp_mdl_ckpt_path)
 
     stop = False
     while not stop:
         try:
             grasp_from_shelf(
-                detector=obj_det_mdl,
+                detector=detector, 
                 camera=camera, 
-                robot=robot, 
-                grasp_module=grasp_mdl
+                robot=robot,
+                grasp_module=grasp_mdl,
+                detect_obj_from_overlook=True,
+                fall_back_after_grasp=False
+            )
+
+            # Construct path from grasp end 
+            path = []
+            blend = []
+
+            fb_position = robot.get_observation()["ee_pose_euler"][:3]
+
+            # First step is falling back from grasp
+            fb_position[1] += 0.35
+            fb_position[2] += 0.07
+            path.append(fb_position)
+            blend.append(0.1)
+
+            # If we're below the counter, go through safe point first
+            if fb_position[2] < 0.5:
+                # First stop is a close safe point 
+                path.append(robot.get_closest_safe_3d_position())
+                blend.append(0.3)
+
+                # Then add a high point
+                path.append(np.array([0.0, -0.4, 0.8]))
+                blend.append(0.25)
+            
+            handover(
+                camera, 
+                robot, 
+                position=[0.0, -1.1, 0.7], 
+                initial_path=path, 
+                initial_blend=blend
                 )
+
         except KeyboardInterrupt:
             stop = True
     
