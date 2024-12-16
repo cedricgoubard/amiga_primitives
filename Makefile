@@ -241,3 +241,6 @@ build-localuser: .build-base
 
 pull-data-amigo:
 	@rsync -avz --ignore-existing  -e "ssh -i ~/.ssh/id_ed25519_git" amigo@10.0.0.163:/home/amigo/cedric/amiga_primitives/data/ ${current_dir}/data/
+
+push-mdl-amigo:
+	@rsync -avz -e "ssh -i ~/.ssh/id_ed25519_git" ${current_dir}/logs/2024-12-13_16-16-10/checkpoints/epoch=508-val_loss=0.32.ckpt amigo@10.0.0.163:/home/amigo/cedric/amiga_primitives/resources/models

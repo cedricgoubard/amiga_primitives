@@ -97,9 +97,9 @@ class GaussianNoiseWithDistance(T.Transform):
 
 
 class SmallCNNBackbone(nn.Module):
-    def __init__(self, img_size: int):
+    def __init__(self, img_size: int, input_channels: int = 1):
         super(SmallCNNBackbone, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=1, padding=2)
+        self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=1, padding=2)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
         self.conv4 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
@@ -130,7 +130,7 @@ class GraspingModel(nn.Module):
                 self.rgb_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
                 self.rgb_backbone.fc = nn.Identity()  # Remove final classification layer
             elif cfg.rgb_backbone == "smallcnn":
-                self.rgb_backbone = SmallCNNBackbone(cfg.img_size)
+                self.rgb_backbone = SmallCNNBackbone(cfg.img_size, input_channels=3)
             else:
                 raise ValueError(f"Unknown RGB backbone {cfg.rgb_backbone}")
             
@@ -147,7 +147,7 @@ class GraspingModel(nn.Module):
                 self.depth_backbone.fc = nn.Identity()  # Remove final classification layer
                 self.depth_backbone.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
             elif cfg.depth_backbone == "smallcnn":
-                self.depth_backbone = SmallCNNBackbone(cfg.img_size)
+                self.depth_backbone = SmallCNNBackbone(cfg.img_size, input_channels=1)
             else: 
                 raise ValueError(f"Unknown depth backbone {cfg.depth_backbone}")
 

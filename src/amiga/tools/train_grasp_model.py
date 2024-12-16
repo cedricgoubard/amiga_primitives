@@ -22,8 +22,9 @@ def update_cfg_with_sweep_params(cfg):
     """
     sweep_config = wandb.config
     possible_keys = [
-        "img_size", "freeze_depth_backbone", "learning_rate", "batch_size_train", 
-        "optimizer", "depth_backbone", "max_depth_mm", "use_rgb"
+        "img_size", "freeze_depth_backbone", "freeze_rgb_backbone", "learning_rate", 
+        "batch_size_train", "optimizer", "depth_backbone", "rgb_backbone", 
+        "max_depth_mm", "use_rgb", 
         ]
     
     for key in possible_keys:
