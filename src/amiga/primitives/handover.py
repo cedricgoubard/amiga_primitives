@@ -1,5 +1,6 @@
 import time
 import random
+from typing import List
 
 import torch
 import numpy as np
@@ -18,27 +19,20 @@ from amiga.utils import save_rgb, save_depth
 def handover(
         camera: CameraDriver, 
         robot: AMIGA,
+        position: np.ndarray = [0.0, -1.1, 0.7],
+        initial_path: List[np.ndarray] = None,
+        initial_blend: List[float] = None
         ):
 
+    if initial_path is None: initial_path = []
+    if initial_blend is None: initial_blend = []
+    
+    path = initial_path
+    blend = initial_blend
 
-    path = []
-    blend = []
-
-    eef_position = robot.get_observation()["ee_pose_euler"][:3]
-
-
-    # If we're below the counter, go through safe point first
-    if eef_position[2] < 0.5:
-        # First stop is a close safe point 
-        path.append(robot.get_closest_safe_3d_position())
-        blend.append(0.3)
-
-        # Then add a high point
-        path.append(np.array([0.0, -0.4, 0.8]))
-        blend.append(0.25)
-
-    # Then handover point
-    path.append(np.array([0.0, -1.1, 0.7]))
+   
+    # Add handover point to initial path
+    path.append(np.array(position))
     blend.append(0.0)
 
 
