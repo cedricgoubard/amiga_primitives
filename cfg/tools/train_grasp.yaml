@@ -1,4 +1,4 @@
-data_dir: data/grasp_shelf_clean/
+data_dir: data/grasp_shelf_v2/
 logs_dir: logs/${now}  # "now" has to be created in python code
 
 seed: 1006
@@ -18,8 +18,8 @@ train_ratio: 0.75
 max_epochs: 7000
 log_every_n_steps: 1
 learning_rate: 0.001
-# batch_size_train: 191
-batch_size_val: 75
+batch_size_train: 100
+batch_size_val: 100
 optimizer: adamw  # adam, sgd, adamw
 
 early_stopping:
@@ -35,7 +35,7 @@ mdl_ckpt:
   # every_n_train_steps: 2000
 
 wandb:
-  project: "amigrasp_clean"
+  project: "amigrasp_v2"
   config: {}
   save_dir: ${logs_dir}
   log_model: true
@@ -50,5 +50,5 @@ sweep:
     rgb_backbone: ["resnet18", "smallcnn"]
     freeze_rgb_backbone: [true, false]
     freeze_depth_backbone: [true, false]
-    batch_size_train: [110, 220]
+    # batch_size_train: [110, 220]
   count: 350

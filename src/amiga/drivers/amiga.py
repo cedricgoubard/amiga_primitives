@@ -309,7 +309,7 @@ class AMIGA(ZMQBackendObject):
         
         path_js = []
         for i in range(len(path)):
-            path_js += [np.concatenate([path[i], [0.8, 1.4, blend[i]]], axis=0)]
+            path_js += [np.concatenate([path[i], [3.0, 3.0, blend[i]]], axis=0)]
         
         path_js[-1][-1] = 0.0
 

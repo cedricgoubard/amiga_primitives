@@ -122,8 +122,8 @@ def collect_grasp_demo(
 
         res = grasp_module.pred_dx_dy_dz(rgb, depth)
         target_xyz = init_xyz + res
-        target_xyz[1] += 0.06  # offset in y (backwards)
-        target_xyz[2] += 0.04  # offset in z (upwards)
+        # target_xyz[1] += 0.06  # offset in y (backwards)
+        # target_xyz[2] += 0.04  # offset in z (upwards)
 
         robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
         
@@ -167,15 +167,15 @@ def collect_grasp_demo(
     if key == "y":
         sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         # Save initial images, position and target position
-        save_rgb(rgb_pre_grasp, path=f"data/grasp_shelf_clean/{sample_id}_rgb.png")
-        np.save(f"data/grasp_shelf_clean/{sample_id}_depth.npy", depth_pre_grasp)
-        np.save(f"data/grasp_shelf_clean/{sample_id}_init_xyz.npy", init_xyz)
-        np.save(f"data/grasp_shelf_clean/{sample_id}_target_xyz.npy", target_xyz)
+        save_rgb(rgb_pre_grasp, path=f"data/grasp_shelf_v2/{sample_id}_rgb.png")
+        np.save(f"data/grasp_shelf_v2/{sample_id}_depth.npy", depth_pre_grasp)
+        np.save(f"data/grasp_shelf_v2/{sample_id}_init_xyz.npy", init_xyz)
+        np.save(f"data/grasp_shelf_v2/{sample_id}_target_xyz.npy", target_xyz)
 
-        save_rgb(rgb_pre_place, path=f"data/place_shelf_clean/{sample_id}_rgb.png")
-        np.save(f"data/place_shelf_clean/{sample_id}_depth.npy", depth_pre_place)
-        np.save(f"data/place_shelf_clean/{sample_id}_init_xyz.npy", fall_back_xyz)
-        np.save(f"data/place_shelf_clean/{sample_id}_target_xyz.npy", target_xyz)
+        save_rgb(rgb_pre_place, path=f"data/place_shelf_v2/{sample_id}_rgb.png")
+        np.save(f"data/place_shelf_v2/{sample_id}_depth.npy", depth_pre_place)
+        np.save(f"data/place_shelf_v2/{sample_id}_init_xyz.npy", fall_back_xyz)
+        np.save(f"data/place_shelf_v2/{sample_id}_target_xyz.npy", target_xyz)
 
     if key == "m":
         print("Current target position: ", target_xyz)
@@ -183,15 +183,15 @@ def collect_grasp_demo(
         print("Saving target position: ", target_xyz)
         sample_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
         # Save initial images, position and target position
-        save_rgb(rgb_pre_grasp, path=f"data/grasp_shelf_clean/{sample_id}_rgb.png")
-        np.save(f"data/grasp_shelf_clean/{sample_id}_depth.npy", depth_pre_grasp)
-        np.save(f"data/grasp_shelf_clean/{sample_id}_init_xyz.npy", init_xyz)
-        np.save(f"data/grasp_shelf_clean/{sample_id}_target_xyz.npy", target_xyz)
+        save_rgb(rgb_pre_grasp, path=f"data/grasp_shelf_v2/{sample_id}_rgb.png")
+        np.save(f"data/grasp_shelf_v2/{sample_id}_depth.npy", depth_pre_grasp)
+        np.save(f"data/grasp_shelf_v2/{sample_id}_init_xyz.npy", init_xyz)
+        np.save(f"data/grasp_shelf_v2/{sample_id}_target_xyz.npy", target_xyz)
 
-        save_rgb(rgb_pre_place, path=f"data/place_shelf_clean/{sample_id}_rgb.png")
-        np.save(f"data/place_shelf_clean/{sample_id}_depth.npy", depth_pre_place)
-        np.save(f"data/place_shelf_clean/{sample_id}_init_xyz.npy", fall_back_xyz)
-        np.save(f"data/place_shelf_clean/{sample_id}_target_xyz.npy", target_xyz)
+        save_rgb(rgb_pre_place, path=f"data/place_shelf_v2/{sample_id}_rgb.png")
+        np.save(f"data/place_shelf_v2/{sample_id}_depth.npy", depth_pre_place)
+        np.save(f"data/place_shelf_v2/{sample_id}_init_xyz.npy", fall_back_xyz)
+        np.save(f"data/place_shelf_v2/{sample_id}_target_xyz.npy", target_xyz)
 
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.open_gripper()

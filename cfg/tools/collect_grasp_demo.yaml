@@ -12,5 +12,6 @@ cam_zmq:
   class_name: ZEDCamera
   async_client: true
 
-yolo_weights: resources/models/241209_yolov11s_datav6_mAP50=0.918.pt
-grasp_mdl_ckpt_path: resources/models/241214_grasp_val_loss=0.32.ckpt
+yolo_weights: resources/models/250218_yolov11s_datav2_mAP50=0.988.pt
+# 250128_yolov11s_datav1_mAP50=0.98.pt
+# grasp_mdl_ckpt_path: resources/models/250218_grasp_v2_val_loss=0.19.ckpt

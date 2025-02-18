@@ -37,7 +37,7 @@ if __name__ == "__main__":
     while True:
         rgb, depth = client.read()
         rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
-        cv2.imwrite(f"data/obj_det/l{i}.png", rgb)
+        cv2.imwrite(f"data/obj_det_v2/l{i}.png", rgb)
         i+=1
 
         # Normalise depth to 255
@@ -46,4 +46,9 @@ if __name__ == "__main__":
         # depth = depth.astype("uint8")
         # cv2.imwrite("latest_depth.jpg", depth)
 
-        time.sleep(1 / rate)
+
+        inp = input("Press enter to continue, q to quit")
+        if inp == "q":
+            break
+
+        # time.sleep(1 / rate)
