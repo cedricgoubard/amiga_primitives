@@ -22,8 +22,12 @@ def grasp_from_shelf(
         obj_name: str = None, 
         grasp_module: GraspingLightningModule = None,
         detect_obj_from_overlook: bool = True,
-        fall_back_after_grasp: bool = True
+        fall_back_after_grasp: bool = True,
+        already_grasped: list = []
         ):
+
+    if obj_name is not None and len(already_grasped) > 0:
+        assert obj_name not in already_grasped, f"{obj_name} already grasped"
     
     ####################################################################################
     ############# Find the object, get an position estimate and move closer ############
@@ -55,7 +59,9 @@ def grasp_from_shelf(
             save_rgb(overlay_results(rgb, objs), path="latest_objects.jpg")
 
         if obj_name is None:
-            det_obj = [random.choice(objs)] 
+            available_objs = [oo for oo in objs if oo["class_name"] not in already_grasped]
+            if len(available_objs) == 0: raise ValueError("No objects to grasp")
+            det_obj = [random.choice(available_objs)] 
         else:
             det_obj = [obj for obj in objs if obj["class_name"] == obj_name]
             if len(det_obj) == 0: raise ValueError(f"No {obj_name} detected")
@@ -132,8 +138,8 @@ def grasp_from_shelf(
 
     res = grasp_module.pred_dx_dy_dz(rgb, depth)
     target_xyz = init_xyz + res
-    target_xyz[1] += 0.06  # offset in y (backwards)
-    target_xyz[2] += 0.05  # offset in z (upwards)
+    target_xyz[1] += 0.09  # offset in y (backwards)
+    target_xyz[2] += 0.08  # offset in z (upwards)
 
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.close_gripper()
@@ -169,3 +175,5 @@ def grasp_from_shelf(
     # while key != "c":
     #     key = input("Press 'c' to continue: ")
     #     key = key.lower()
+
+    return det_obj[0]["class_name"]

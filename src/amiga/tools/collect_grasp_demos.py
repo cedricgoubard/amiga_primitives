@@ -33,8 +33,8 @@ def collect_grasp_demo(
     objs = detector(rgb, tracking=False)
     
     # To collect data for obj det
-    # sample_path = f'data/obj_det/{dt.datetime.now().strftime("%Y%m%d%H%M%S")}_rgb.png'
-    # save_rgb(rgb, path=sample_path)
+    sample_path = f'data/obj_det_v2/{dt.datetime.now().strftime("%Y%m%d%H%M%S")}_rgb.png'
+    save_rgb(rgb, path=sample_path)
     
     # For debug
     save_rgb(rgb, path="latest_rgb.jpg")
@@ -122,8 +122,8 @@ def collect_grasp_demo(
 
         res = grasp_module.pred_dx_dy_dz(rgb, depth)
         target_xyz = init_xyz + res
-        # target_xyz[1] += 0.06  # offset in y (backwards)
-        # target_xyz[2] += 0.04  # offset in z (upwards)
+        target_xyz[1] += 0.07  # offset in y (backwards)
+        target_xyz[2] += 0.06  # offset in z (upwards)
 
         robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
         

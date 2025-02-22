@@ -43,16 +43,21 @@ def Dev(cfg: OmegaConf):
     grasp_mdl = GraspingLightningModule.load_from_checkpoint(cfg.grasp_mdl_ckpt_path)
 
     stop = False
+    n_obj = 9
+    already_grasped = []
     while not stop:
         try:
-            grasp_from_shelf(
+            grasped_obj = grasp_from_shelf(
                 detector=detector, 
                 camera=camera, 
                 robot=robot,
                 grasp_module=grasp_mdl,
                 detect_obj_from_overlook=True,
-                fall_back_after_grasp=False
+                fall_back_after_grasp=False,
+                already_grasped=already_grasped
             )
+
+            already_grasped += [grasped_obj]
 
             # Construct path from grasp end 
             path = []
@@ -83,6 +88,12 @@ def Dev(cfg: OmegaConf):
                 initial_path=path, 
                 initial_blend=blend
                 )
+
+
+            n_obj -= 1 
+            
+            if n_obj == 0:
+                stop = True
 
         except KeyboardInterrupt:
             stop = True
