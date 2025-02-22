@@ -131,6 +131,31 @@ class AMIGA(ZMQBackendObject):
 
         self._load_named_joint_cfgs()
 
+        self._speed = "low"
+
+    def set_speed(self, speed: str):
+        assert speed in ["low", "high"], "Speed must be 'low' or 'high'"
+        self._speed = speed
+
+    def get_speed(self):
+        return self._speed
+    
+    def _get_joint_speed_values_vel_acc(self):
+        if self._speed == "low":
+            return [0.8, 1.0]
+        elif self._speed == "high":
+            return [2.0, 2.0]
+        else:
+            raise ValueError("Invalid speed value")
+        
+    def _get_eef_speed_values_vel_acc(self):
+        if self._speed == "low":
+            return [0.2, 1.0]
+        elif self._speed == "high":
+            return [0.75, 2.0]
+        else:
+            raise ValueError("Invalid speed value")
+
     def _check_required_libraries(self) -> bool:
         ready = True
         try:
@@ -276,21 +301,30 @@ class AMIGA(ZMQBackendObject):
             joint_state (np.ndarray): The state to command the leader robot to.
         """
         self._reload_ur_program_if_not_running()
+
+        vel, acc = self._get_joint_speed_values_vel_acc()
+
         if self._use_gripper:
-            self.robot.moveJ(joint_positions[:6], asynchronous=(not wait))
+            self.robot.moveJ(
+                joint_positions[:6], speed=vel, acceleration=acc, 
+                asynchronous=(not wait)
+                )
             gripper_pos = joint_positions[-1] * 255
             self.gripper.move(gripper_pos, 255, 10)
         else:
-            self.robot.moveJ(joint_positions, asynchronous=(not wait))
+            self.robot.moveJ(
+                joint_positions, speed=vel, acceleration=acc, asynchronous=(not wait))
         
         return True
     
     def follow_joint_positions_path(self, path: List[np.ndarray], final_gripper_position: float = None, wait: bool = False) -> None:
         self._reload_ur_program_if_not_running()
+
+        vel, acc = self._get_joint_speed_values_vel_acc()
         
         path_js = []
         for i in range(len(path)):
-            path_js += [np.concatenate([path[i], [0.8, 1.4, 0.3]], axis=0)]
+            path_js += [np.concatenate([path[i], [vel, acc, 0.3]], axis=0)]
         
         path_js[-1][-1] = 0.0
 
@@ -307,16 +341,18 @@ class AMIGA(ZMQBackendObject):
     def go_to_joint_positions_through_safe_point(self, joint_positions: np.ndarray, wait: bool = False) -> None:
         path_js = []
         wp = self.get_closest_safe_3d_position()
+
+        vel, acc = self._get_joint_speed_values_vel_acc()
   
         # add safe waypoint
         path_js += [np.concatenate([
             self.robot.getInverseKinematics(
                 x=np.concatenate([wp, rpy2rv(*self.default_rpy)], axis=0),
                 qnear=self._get_joint_positions()[:6]),
-            [0.8, 1.4, 0.3]  # speed, acc, blend
+            [vel, acc, 0.3]  # speed, acc, blend
         ])]
 
-        path_js += [np.concatenate([joint_positions[:6], [0.8, 1.4, 0.0]], axis=0)]
+        path_js += [np.concatenate([joint_positions[:6], [vel, acc, 0.0]], axis=0)]
 
         if len(joint_positions) > 6 and self._use_gripper:
             res = self.follow_joint_positions_path(path_js, joint_positions[-1], wait=wait)
@@ -337,13 +373,18 @@ class AMIGA(ZMQBackendObject):
         # UR expects rotation vector, not RPY
         eef_pose[3:6] = rpy2rv(eef_pose[3], eef_pose[4], eef_pose[5])
 
+        vel, acc = self._get_joint_speed_values_vel_acc()
+
         if self._use_gripper:
-            self.robot.moveJ_IK(pose=eef_pose[:6], asynchronous=(not wait))
+            self.robot.moveJ_IK(
+                pose=eef_pose[:6], speed=vel, acceleration=acc, asynchronous=(not wait)
+                )
             if gripper_position is not None:
                 gripper_pos = gripper_position * 255
                 self.gripper.move(gripper_pos, 255, 10)
         else:
-            self.robot.moveJ_IK(eef_pose, asynchronous=(not wait))
+            self.robot.moveJ_IK(
+                eef_pose, speed=vel, acceleration=acc, asynchronous=(not wait))
 
     def go_to_eef_position_default_orientation(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:        
         eef_pose = np.append(eef_position, self.default_rpy)
@@ -353,6 +394,8 @@ class AMIGA(ZMQBackendObject):
         self._reload_ur_program_if_not_running()
 
         if blend is None: blend = [0.0] * len(path)
+
+        vel, acc = self._get_joint_speed_values_vel_acc()
         
         path_js = []
         qnear = self._get_joint_positions()[:6]
@@ -360,7 +403,7 @@ class AMIGA(ZMQBackendObject):
             pose = np.concatenate([path[i,:3], rpy2rv(*path[i,3:6])], axis=0)
             jpos = self.robot.getInverseKinematics(x=pose, qnear=qnear)
             assert blend[i] >= 0, f"Blend must be positive but got: {blend[i]}"
-            path_js += [np.append(jpos, [0.8, 1.4, blend[i]])]
+            path_js += [np.append(jpos, [vel, acc, blend[i]])]
             qnear = jpos
         
         path_js[-1][-1] = 0.0
@@ -502,4 +545,6 @@ class AMIGA(ZMQBackendObject):
             "get_camera_tf": None,
             "get_closest_safe_3d_position": None,
             "get_named_eef_position": ["name"],
+            "get_speed": None,
+            "set_speed": ["speed"],
         }
