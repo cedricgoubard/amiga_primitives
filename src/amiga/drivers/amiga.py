@@ -143,7 +143,7 @@ class AMIGA(ZMQBackendObject):
     
     def _get_joint_speed_values_vel_acc(self):
         if self._speed == "low":
-            return [0.8, 1.0]
+            return [0.6, 0.7]
         elif self._speed == "high":
             return [2.0, 2.0]
         else:
@@ -338,13 +338,13 @@ class AMIGA(ZMQBackendObject):
         self._reload_ur_program_if_not_running()
 
         vel, acc = self._get_joint_speed_values_vel_acc()
-        if blend is None: blend = [0.0] * len(path)
+        if blend is None: blend = [0.001] * len(path)
         
         path_js = []
         for i in range(len(path)):
             path_js += [np.concatenate([path[i], [vel, acc, blend[i]]], axis=0)]
         
-        path_js[-1][-1] = 0.0
+        path_js[-1][-1] = 0.001
 
         if self._use_gripper:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
@@ -370,7 +370,7 @@ class AMIGA(ZMQBackendObject):
             [vel, acc, 0.3]  # speed, acc, blend
         ])]
 
-        path_js += [np.concatenate([joint_positions[:6], [vel, acc, 0.0]], axis=0)]
+        path_js += [np.concatenate([joint_positions[:6], [vel, acc, 0.001]], axis=0)]
 
         if len(joint_positions) > 6 and self._use_gripper:
             res = self.follow_joint_positions_path(path_js, joint_positions[-1], wait=wait)
@@ -411,7 +411,7 @@ class AMIGA(ZMQBackendObject):
     def follow_eef_path(self, path: np.ndarray, gripper_position: float = None, wait: bool = False, blend: List[float] = None) -> None:
         self._reload_ur_program_if_not_running()
 
-        if blend is None: blend = [0.0] * len(path)
+        if blend is None: blend = [0.001] * len(path)
 
         vel, acc = self._get_joint_speed_values_vel_acc()
         
@@ -424,7 +424,7 @@ class AMIGA(ZMQBackendObject):
             path_js += [np.append(jpos, [vel, acc, blend[i]])]
             qnear = jpos
         
-        path_js[-1][-1] = 0.0
+        path_js[-1][-1] = 0.001
 
         if self._use_gripper:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
@@ -444,7 +444,7 @@ class AMIGA(ZMQBackendObject):
     def go_to_eef_position_through_safe_point(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
         wp = self.get_closest_safe_3d_position()
         path = np.stack([wp, eef_position])
-        self.follow_eef_position_path_default_orientation(path, gripper_position, wait, blend=[0.3, 0.0])
+        self.follow_eef_position_path_default_orientation(path, gripper_position, wait, blend=[0.3, 0.001])
 
     def servo_joint_positions(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.
