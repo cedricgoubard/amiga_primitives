@@ -58,7 +58,7 @@ def handover(
     robot.open_gripper()
     time.sleep(2.0)
     robot.close_gripper()
-    time.sleep(1.0)
+    # time.sleep(1.0)
 
     robot.set_freedrive_mode(enable=False)
     
