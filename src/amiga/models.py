@@ -204,17 +204,14 @@ class GraspingLightningModule(L.LightningModule):
         if isinstance(cfg, dict):
             cfg = OmegaConf.create(cfg)
 
-        if stats is None: 
-            print("Stats not provided, using default values")
-            stats = {
-                'depth': {'mean': torch.tensor(0.8930), 'std': torch.tensor(0.1611)}, 
-                'dx_dy_dz': {'mean': torch.tensor([-0.0386, -0.3643, -0.1164]), 'std': torch.tensor([0.0265, 0.1136, 0.0413])}
-                }
         self.stats = stats
-       
+
         self.model = GraspingModel(cfg)
         self.cfg = cfg
-        self.save_hyperparameters(OmegaConf.to_container(cfg, resolve=True))
+        self.save_hyperparameters({
+            "cfg": OmegaConf.to_container(cfg, resolve=True),
+            "stats": self.stats
+        })
 
         self.augments_rgb = T.Compose([
                 T.ColorJitter(brightness=0.5, contrast=0.15, saturation=0.15, hue=0.15),
@@ -228,6 +225,13 @@ class GraspingLightningModule(L.LightningModule):
         
         self._train_sample_is_saved = False
         self._val_sample_is_saved = False
+
+    def on_load_checkpoint(self, checkpoint):
+        loaded_stats = checkpoint["hyper_parameters"].get("stats", {})
+        self.stats = {
+            k: {sk: v for sk, v in sv.items()} for k, sv in loaded_stats.items()
+        }
+        return super().on_load_checkpoint(checkpoint)
 
     def _save_grid(self, batch, label):
         # Save up to 9 images from the batch in a single grid image for visualisation 

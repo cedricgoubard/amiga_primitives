@@ -1,5 +1,7 @@
 from typing import Dict, Tuple, List
 import time
+import os
+import psutil
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -106,11 +108,11 @@ class AMIGA(ZMQBackendObject):
         connected = False
         while not connected:
             try:
-                self.robot = rtde_control.RTDEControlInterface(cfg.robot_ip, rt_priority=97)
-                self.r_inter = rtde_receive.RTDEReceiveInterface(cfg.robot_ip)
+                self.robot = rtde_control.RTDEControlInterface(cfg.robot_ip, rt_priority=85)
+                self.r_inter = rtde_receive.RTDEReceiveInterface(cfg.robot_ip, rt_priority=90)
                 connected = True
-            except RuntimeError:
-                print("Failed to connect to robot, retrying in 5 seconds")
+            except RuntimeError as e:
+                print("Failed to connect to robot, retrying in 5 seconds: ", e)
                 time.sleep(5)
         
         if cfg.use_gripper:
@@ -133,6 +135,16 @@ class AMIGA(ZMQBackendObject):
         self._load_named_cfgs()
 
         self._speed = "low"
+
+        process = psutil.Process(os.getpid())
+        rt_app_priority = 80
+        param = os.sched_param(rt_app_priority)
+        try:
+            os.sched_setscheduler(0, os.SCHED_FIFO, param)
+        except OSError:
+            print("Failed to set real-time process scheduler to %u, priority %u" % (os.SCHED_FIFO, rt_app_priority))
+        else:
+            print("Process real-time priority set to %u" % rt_app_priority)
 
     def set_speed(self, speed: str):
         assert speed in ["low", "high"], "Speed must be 'low' or 'high'"
