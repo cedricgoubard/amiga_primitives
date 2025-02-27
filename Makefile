@@ -23,7 +23,7 @@ run-amiga-listener:
 			--ulimit rtprio=98 \
 			--ulimit memlock=-1 \
 			--ulimit rttime=-1 \
-			${project-name}-amiga:latest bash -c "pip install -e . && python -m amiga --zmq --cfg cfg/amiga.yaml"
+			${project-name}-amiga:latest bash -c "python -m amiga --zmq --cfg cfg/amiga.yaml"
 
 
 run-zed:
@@ -69,7 +69,7 @@ collect-grasp-demo:
 		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
+		${project-name}-torch bash -c "python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
 
 run-dev:
 	@docker run \
@@ -125,7 +125,7 @@ run-handeye:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
+		${project-name}-user bash -c "python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
 
 
 train-grasp:
