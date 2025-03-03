@@ -163,13 +163,11 @@ class AMIGA(ZMQBackendObject):
         
     def _get_eef_speed_values_vel_acc(self):
         if self._speed == "low":
-            return [0.2, 1.0]
+            return [0.5, 1.0]
         elif self._speed == "high":
-            return [0.75, 2.0]
+            return [1.0, 2.0]
         else:
             raise ValueError("Invalid speed value")
-
-        self._speed = "low"
 
     def set_speed(self, speed: str):
         assert speed in ["low", "high"], "Speed must be 'low' or 'high'"
@@ -177,22 +175,6 @@ class AMIGA(ZMQBackendObject):
 
     def get_speed(self):
         return self._speed
-    
-    def _get_joint_speed_values_vel_acc(self):
-        if self._speed == "low":
-            return [0.8, 1.0]
-        elif self._speed == "high":
-            return [2.0, 2.0]
-        else:
-            raise ValueError("Invalid speed value")
-        
-    def _get_eef_speed_values_vel_acc(self):
-        if self._speed == "low":
-            return [0.2, 1.0]
-        elif self._speed == "high":
-            return [0.75, 2.0]
-        else:
-            raise ValueError("Invalid speed value")
 
     def _check_required_libraries(self) -> bool:
         ready = True
@@ -456,7 +438,7 @@ class AMIGA(ZMQBackendObject):
 
         if blend is None: blend = [0.001] * len(path)
 
-        vel, acc = self._get_joint_speed_values_vel_acc()
+        vel, acc = self._get_eef_speed_values_vel_acc()
         
         path_js = []
         qnear = self._get_joint_positions()[:6]
@@ -532,27 +514,37 @@ class AMIGA(ZMQBackendObject):
        
         self.robot.waitPeriod(t_start)
 
-    def move_eef_until_contact(self, direction: np.ndarray):
+    def move_eef_until_contact(
+        self, direction: np.ndarray, contact_dir: np.ndarray = None, 
+        acceleration: float = 1.0
+        ):
         self._reload_ur_program_if_not_running()
 
         if isinstance(direction, list):
             direction = np.array(direction)
-        # assert direction.shape == (3,), f"Direction must have 3 elements, got {direction.shape}"
+        assert direction.shape == (6,), f"Direction must have 6 elements, got {direction.shape}"
+
+        if contact_dir is not None:
+            if isinstance(contact_dir, list):
+                contact_dir = np.array(contact_dir) 
+            assert contact_dir.shape == (6,), f"Contact direction must have 6 elements, got {contact_dir.shape}"
+        else:
+            contact_dir = np.array([0, 0, 0, 0, 0, 0])
 
         # Scale direction to unit vector and multiply by current robot speed
         direction = direction / np.linalg.norm(direction)
+        direction /= 2  
         vel, acc = self._get_eef_speed_values_vel_acc()
         direction *= vel
 
-        print(f"Direction to move: {direction}, acc {acc}")
         
         # moveUntilContact takes a "direction" param which is the direction of the 
-        # detected contact (6D), but the direction of movement is given by xd (3D)
+        # detected contact, but the direction of movement is given by xd
         self.robot.moveUntilContact(
             xd=direction,
-            # acceleration=acc
+            direction=contact_dir,
+            acceleration=acceleration
             )
-        print("Out")
 
     def is_freedrive_enabled(self) -> bool:
         """Check if the robot is in freedrive mode.
@@ -647,7 +639,7 @@ class AMIGA(ZMQBackendObject):
             "follow_joint_positions_path": ["path", "final_gripper_position", "wait"],
             "follow_eef_path": ["path", "gripper_position", "wait"],
             "follow_eef_position_path_default_orientation": ["path", "gripper_position", "wait"],
-            "move_eef_until_contact": ["direction"],
+            "move_eef_until_contact": ["direction", "contact_dir", "acceleration"],
             "close_gripper": None,
             "open_gripper": None,
             "get_camera_tf": None,
