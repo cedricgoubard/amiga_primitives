@@ -140,8 +140,7 @@ def grasp_from_shelf(
 
     res = grasp_module.pred_dx_dy_dz(rgb, depth)
     target_xyz = init_xyz + res
-    target_xyz[1] += 0.09  # offset in y (backwards)
-    target_xyz[2] += 0.08  # offset in z (upwards)
+    target_xyz[2] += 0.01  # offset in z (upwards)
 
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.close_gripper()
