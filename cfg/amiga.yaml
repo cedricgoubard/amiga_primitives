@@ -10,7 +10,7 @@ gripper_ip: 10.0.4.12
 
 cameras:
   - zed:
-    host: localhost
+    host: 10.0.4.5
     port: 5556
 
 
