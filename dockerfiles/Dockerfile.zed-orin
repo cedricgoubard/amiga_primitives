@@ -22,6 +22,6 @@ RUN pip install ur_rtde==1.6.0
 ########################################################################################
 WORKDIR /amiga
 COPY . .
-RUN pip install -e .
+RUN python3 -m pip install -e .
 
 CMD bash
