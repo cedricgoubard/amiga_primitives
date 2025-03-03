@@ -122,8 +122,7 @@ def collect_grasp_demo(
 
         res = grasp_module.pred_dx_dy_dz(rgb, depth)
         target_xyz = init_xyz + res
-        target_xyz[1] += 0.07  # offset in y (backwards)
-        target_xyz[2] += 0.06  # offset in z (upwards)
+        target_xyz[2] += 0.01  # offset in z (upwards), just in case
 
         robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
         
@@ -136,7 +135,7 @@ def collect_grasp_demo(
         robot.set_freedrive_mode(enable=False)
     fall_back_xyz = target_xyz.copy()
     fall_back_xyz[1] += 0.3
-    fall_back_xyz[2] += 0.1
+    fall_back_xyz[2] += 0.17
 
     # We will also record the opposite demo (placing on the shelf)
     # Since the object in the hand, we'll need to start from a tilted position
@@ -235,6 +234,8 @@ if __name__ == "__main__":
     if "grasp_mdl_ckpt_path" in cfg.keys() and cfg.grasp_mdl_ckpt_path is not None:
         # Load grasping model
         grasp_mdl = GraspingLightningModule.load_from_checkpoint(cfg.grasp_mdl_ckpt_path)
+
+    print(f"Using stats {grasp_mdl.stats}")
 
     stop = False
     while not stop:

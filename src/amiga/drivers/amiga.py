@@ -1,5 +1,7 @@
 from typing import Dict, Tuple, List
 import time
+import os
+import psutil
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -106,11 +108,11 @@ class AMIGA(ZMQBackendObject):
         connected = False
         while not connected:
             try:
-                self.robot = rtde_control.RTDEControlInterface(cfg.robot_ip, rt_priority=97)
-                self.r_inter = rtde_receive.RTDEReceiveInterface(cfg.robot_ip)
+                self.robot = rtde_control.RTDEControlInterface(cfg.robot_ip, rt_priority=85)
+                self.r_inter = rtde_receive.RTDEReceiveInterface(cfg.robot_ip, rt_priority=90)
                 connected = True
-            except RuntimeError:
-                print("Failed to connect to robot, retrying in 5 seconds")
+            except RuntimeError as e:
+                print("Failed to connect to robot, retrying in 5 seconds: ", e)
                 time.sleep(5)
         
         if cfg.use_gripper:
@@ -131,6 +133,41 @@ class AMIGA(ZMQBackendObject):
         self.default_rpy = np.array([np.pi/2, -np.pi/4, 0.0])  # Gripper facing forward
 
         self._load_named_cfgs()
+
+        self._speed = "low"
+
+        process = psutil.Process(os.getpid())
+        rt_app_priority = 80
+        param = os.sched_param(rt_app_priority)
+        try:
+            os.sched_setscheduler(0, os.SCHED_FIFO, param)
+        except OSError:
+            print("Failed to set real-time process scheduler to %u, priority %u" % (os.SCHED_FIFO, rt_app_priority))
+        else:
+            print("Process real-time priority set to %u" % rt_app_priority)
+
+    def set_speed(self, speed: str):
+        assert speed in ["low", "high"], "Speed must be 'low' or 'high'"
+        self._speed = speed
+
+    def get_speed(self):
+        return self._speed
+    
+    def _get_joint_speed_values_vel_acc(self):
+        if self._speed == "low":
+            return [0.6, 0.7]
+        elif self._speed == "high":
+            return [2.0, 2.0]
+        else:
+            raise ValueError("Invalid speed value")
+        
+    def _get_eef_speed_values_vel_acc(self):
+        if self._speed == "low":
+            return [0.2, 1.0]
+        elif self._speed == "high":
+            return [0.75, 2.0]
+        else:
+            raise ValueError("Invalid speed value")
 
         self._speed = "low"
 
@@ -338,13 +375,13 @@ class AMIGA(ZMQBackendObject):
         self._reload_ur_program_if_not_running()
 
         vel, acc = self._get_joint_speed_values_vel_acc()
-        if blend is None: blend = [0.0] * len(path)
+        if blend is None: blend = [0.001] * len(path)
         
         path_js = []
         for i in range(len(path)):
             path_js += [np.concatenate([path[i], [vel, acc, blend[i]]], axis=0)]
         
-        path_js[-1][-1] = 0.0
+        path_js[-1][-1] = 0.001
 
         if self._use_gripper:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
@@ -370,7 +407,7 @@ class AMIGA(ZMQBackendObject):
             [vel, acc, 0.3]  # speed, acc, blend
         ])]
 
-        path_js += [np.concatenate([joint_positions[:6], [vel, acc, 0.0]], axis=0)]
+        path_js += [np.concatenate([joint_positions[:6], [vel, acc, 0.001]], axis=0)]
 
         if len(joint_positions) > 6 and self._use_gripper:
             res = self.follow_joint_positions_path(path_js, joint_positions[-1], wait=wait)
@@ -411,7 +448,7 @@ class AMIGA(ZMQBackendObject):
     def follow_eef_path(self, path: np.ndarray, gripper_position: float = None, wait: bool = False, blend: List[float] = None) -> None:
         self._reload_ur_program_if_not_running()
 
-        if blend is None: blend = [0.0] * len(path)
+        if blend is None: blend = [0.001] * len(path)
 
         vel, acc = self._get_joint_speed_values_vel_acc()
         
@@ -424,7 +461,7 @@ class AMIGA(ZMQBackendObject):
             path_js += [np.append(jpos, [vel, acc, blend[i]])]
             qnear = jpos
         
-        path_js[-1][-1] = 0.0
+        path_js[-1][-1] = 0.001
 
         if self._use_gripper:
             self.robot.moveJ(path=path_js, asynchronous=(not wait))
@@ -444,7 +481,7 @@ class AMIGA(ZMQBackendObject):
     def go_to_eef_position_through_safe_point(self, eef_position: np.ndarray, gripper_position: float = None, wait: bool = False) -> None:
         wp = self.get_closest_safe_3d_position()
         path = np.stack([wp, eef_position])
-        self.follow_eef_position_path_default_orientation(path, gripper_position, wait, blend=[0.3, 0.0])
+        self.follow_eef_position_path_default_orientation(path, gripper_position, wait, blend=[0.3, 0.001])
 
     def servo_joint_positions(self, joint_state: np.ndarray) -> None:
         """Command the leader robot to a given state.

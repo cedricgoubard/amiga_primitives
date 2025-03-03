@@ -23,7 +23,7 @@ run-amiga-listener:
 			--ulimit rtprio=98 \
 			--ulimit memlock=-1 \
 			--ulimit rttime=-1 \
-			${project-name}-amiga:latest bash -c "pip install -e . && python -m amiga --zmq --cfg cfg/amiga.yaml"
+			${project-name}-amiga:latest bash -c "python -m amiga --zmq --cfg cfg/amiga.yaml"
 
 
 run-zed:
@@ -41,7 +41,7 @@ run-zed:
 			-v ${current_dir}/resources/zed/zed_calib/:/usr/local/zed/settings/ \
 			-v ${current_dir}/resources/zed/zed_resources:/usr/local/zed/resources/ \
 			-it \
-			${project-name}-zed:latest bash -c "pip install -e . && python3 -m amiga --zmq --cfg cfg/zed.yaml"
+			${project-name}-zed:latest bash -c "python3 -m amiga --zmq --cfg cfg/zed.yaml"
 
 
 run-zed-obj-det:
@@ -54,7 +54,7 @@ run-zed-obj-det:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.detect_objects --cfg cfg/zed.yaml --weights resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt"
+		${project-name}-torch bash -c "python -m amiga.tools.detect_objects --cfg cfg/zed.yaml --weights resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt"
 
 collect-grasp-demo:
 	@docker run \
@@ -69,7 +69,7 @@ collect-grasp-demo:
 		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
+		${project-name}-torch bash -c "python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
 
 run-dev:
 	@docker run \
@@ -84,7 +84,7 @@ run-dev:
 		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga --script --cfg cfg/scripts/dev.yaml"
+		${project-name}-torch bash -c "python -m amiga --script --cfg cfg/scripts/dev.yaml"
 
 
 run-realsense:
@@ -100,7 +100,7 @@ run-realsense:
 		-v ${current_dir}/resources/.bash_history:/root/.bash_history \
 		-e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
 		-it \
-		${project-name}-rs:latest bash -c "pip install -e . && python -m amiga --zmq --cfg cfg/realsense.yaml"
+		${project-name}-rs:latest bash -c "python -m amiga --zmq --cfg cfg/realsense.yaml"
 
 run-handeye:
 	@docker run \
@@ -112,7 +112,7 @@ run-handeye:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml"
+		${project-name}-user bash -c "python -m amiga.tools.eye_in_hand --cfg cfg/tools/eyeinhand.yaml"
 
 
 .robot_tool:
@@ -125,7 +125,7 @@ run-handeye:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
+		${project-name}-user bash -c "python -m amiga.tools.robot --cfg cfg/amiga.yaml ${rob_flag}"
 
 
 train-grasp:
@@ -141,7 +141,7 @@ train-grasp:
 		-v ${current_dir}/resources/.netrc:/home/${USER}/.netrc \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-torch bash -c "pip install -e . && python -m amiga.tools.train_grasp_model --cfg cfg/tools/train_grasp.yaml ${rob_flag}"
+		${project-name}-torch bash -c "python -m amiga.tools.train_grasp_model --cfg cfg/tools/train_grasp.yaml ${rob_flag}"
 
 
 open-gripper: rob_flag=--open
@@ -194,7 +194,7 @@ get-zed-img:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.get_img --cfg cfg/zed.yaml"
+		${project-name}-user bash -c "python -m amiga.tools.get_img --cfg cfg/zed.yaml"
 
 
 get-rs-img:
@@ -207,7 +207,7 @@ get-rs-img:
 		-v ${current_dir}:/amiga \
 		--user ${UID}:${GID} \
 		-it \
-		${project-name}-user bash -c "pip install -e . && python -m amiga.tools.get_img --cfg cfg/realsense.yaml"
+		${project-name}-user bash -c "python -m amiga.tools.get_img --cfg cfg/realsense.yaml"
 
 
 ########################################################################################

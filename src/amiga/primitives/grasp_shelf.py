@@ -1,5 +1,6 @@
 import time
 import random
+from os.path import join
 
 import torch
 import numpy as np
@@ -23,7 +24,8 @@ def grasp_from_shelf(
         grasp_module: GraspingLightningModule = None,
         detect_obj_from_overlook: bool = True,
         fall_back_after_grasp: bool = True,
-        already_grasped: list = []
+        already_grasped: list = [],
+        img_save_path: str = ""
         ):
 
     if obj_name is not None and len(already_grasped) > 0:
@@ -53,10 +55,10 @@ def grasp_from_shelf(
         objs = detector(rgb, tracking=False)
 
         # For debug
-        save_rgb(rgb, path="latest_rgb.jpg")
-        save_depth(depth, path="latest_depth.jpg", max=3000)
+        save_rgb(rgb, path=join(img_save_path, "latest_rgb.jpg"))
+        save_depth(depth, path=join(img_save_path, "latest_depth.jpg"), max=3000)
         if len(objs) > 0: 
-            save_rgb(overlay_results(rgb, objs), path="latest_objects.jpg")
+            save_rgb(overlay_results(rgb, objs), path=join(img_save_path, "latest_objects.jpg"))
 
         if obj_name is None:
             available_objs = [oo for oo in objs if oo["class_name"] not in already_grasped]

@@ -1,5 +1,5 @@
 zmq:
-  host: localhost
+  host: 10.0.4.1
   port: 5555
   class_name: AMIGA
   async_client: false
@@ -9,7 +9,7 @@ use_gripper: true
 gripper_ip: 10.0.4.12
 
 cameras:
-  - zed:
+  - zed: 10.0.4.5
     host: localhost
     port: 5556
 
