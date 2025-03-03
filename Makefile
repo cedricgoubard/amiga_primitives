@@ -25,6 +25,8 @@ run-amiga-listener:
 			--ulimit rttime=-1 \
 			${project-name}-amiga:latest bash -c "python -m amiga --zmq --cfg cfg/amiga.yaml"
 
+run-amiga-listener-pi:
+	ssh -t amigo_arm_pi "cd cedric/amiga_primitives && make run-amiga-listener"
 
 run-zed:
 	@docker run \
@@ -43,6 +45,8 @@ run-zed:
 			-it \
 			${project-name}-zed:latest bash -c "python -m amiga --zmq --cfg cfg/zed.yaml"
 
+run-zed-orin:
+	ssh -t amigo_orin "cd cedric/amiga_primitives && make run-zed"
 
 run-zed-obj-det:
 	@docker run \
@@ -55,6 +59,7 @@ run-zed-obj-det:
 		--user ${UID}:${GID} \
 		-it \
 		${project-name}-torch bash -c "python -m amiga.tools.detect_objects --cfg cfg/zed.yaml --weights resources/models/241128_yolov11s_datav4_mAP0.5=0.815.pt"
+
 
 collect-grasp-demo:
 	@docker run \
@@ -70,6 +75,7 @@ collect-grasp-demo:
 		--user ${UID}:${GID} \
 		-it \
 		${project-name}-torch bash -c "python -m amiga.tools.collect_grasp_demos --cfg cfg/tools/collect_grasp_demo.yaml"
+
 
 run-dev:
 	@docker run \
@@ -219,7 +225,13 @@ get-rs-img:
 	@mkdir -p ${current_dir}/resources/cache/
 	docker build -f dockerfiles/Dockerfile.base -t ${project-name}-base:latest .
 
-build-zed: .build-base
+.build-base-gpu:
+	@touch ${current_dir}/resources/.bash_history
+	@touch ${current_dir}/resources/.netrc
+	@mkdir -p ${current_dir}/resources/cache/
+	docker build -f dockerfiles/Dockerfile.base-gpu -t ${project-name}-base-torch:latest .
+
+build-zed: .build-base-gpu
 	@docker build -f dockerfiles/Dockerfile.zed -t ${project-name}-zed:latest .
 
 build-realsense: .build-base
@@ -228,12 +240,14 @@ build-realsense: .build-base
 build-amiga-listener: .build-base
 	@docker build -f dockerfiles/Dockerfile.amiga -t ${project-name}-amiga:latest .
 
-build-torch: .build-base
+build-torch: .build-base-gpu
 	@docker build -f dockerfiles/Dockerfile.torch -t ${project-name}-torch:latest --build-arg USERNAME=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
 
 build-localuser: .build-base
 	@docker build -f dockerfiles/Dockerfile.localuser -t ${project-name}-user:latest --build-arg USERNAME=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
 
+build-localuser-gpu: .build-base
+	@docker build -f dockerfiles/Dockerfile.localuser-gpu -t ${project-name}-user-gpu:latest --build-arg USERNAME=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
 
 ########################################################################################
 ##################################### MISC COMMANDS ####################################
