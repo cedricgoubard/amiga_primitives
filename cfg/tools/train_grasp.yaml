@@ -1,27 +1,26 @@
-data_dir: data/grasp_shelf_clean/
+data_dir: data/grasp_shelf_v2/
 logs_dir: logs/${now}  # "now" has to be created in python code
 
 seed: 1006
 
-img_size: 640
-max_depth_mm: 700
+img_size: 224
+# max_depth_mm: 700
 
-use_rgb: false
-rgb_backbone: resnet18  # resnet18 or smallcnn
-freeze_rgb_backbone: false
+use_rgb: true
+# rgb_backbone: resnet18  # resnet18 or smallcnn
+# freeze_rgb_backbone: false
 
-# No reason for these to change too much
 use_depth: true
-depth_backbone: resnet18  # resnet18 or smallcnn
-freeze_depth_backbone: false
+depth_backbone: smallcnn  # resnet18 or smallcnn
+# freeze_depth_backbone: false
 
 train_ratio: 0.75
 max_epochs: 7000
 log_every_n_steps: 1
-learning_rate: 0.002
-batch_size_train: 45
-batch_size_val: 30
-optimizer: adam  # adam, sgd, adamw
+learning_rate: 0.001
+batch_size_train: 100
+batch_size_val: 100
+optimizer: adamw  # adam, sgd, adamw
 
 early_stopping:
   monitor: val_loss
@@ -36,7 +35,20 @@ mdl_ckpt:
   # every_n_train_steps: 2000
 
 wandb:
-  project: "amigrasp_clean"
+  project: "amigrasp_v2"
   config: {}
   save_dir: ${logs_dir}
   log_model: true
+
+sweep:
+  method: "random"
+  metric:
+    goal: "minimize"
+    name: "val_loss"
+  parameters:
+    max_depth_mm: [550, 800]
+    rgb_backbone: ["resnet18", "smallcnn"]
+    freeze_rgb_backbone: [true, false]
+    freeze_depth_backbone: [true, false]
+    # batch_size_train: [110, 220]
+  count: 350

@@ -1,2 +1,6 @@
 .pixi/
 .pytest_cache/
+data/
+logs/
+wandb/
+resources/

@@ -30,10 +30,76 @@ def compute_l2_distance(
     return dist.squeeze(1).squeeze(1), x_dist.squeeze(1), y_dist.squeeze(1), z_dist.squeeze(1)
 
 
+class GaussianNoiseWithDistance(T.Transform):
+    def __init__(self, std_factor=0.1):
+        """
+        Args:
+            std_factor (float): Scaling factor for the noise standard deviation.
+        """
+        super().__init__()
+        self.std_factor = std_factor
+
+        self._dist_map = None
+
+    def _get_distance_map(self, height, width):
+        """Create a distance map where each value represents the distance from the center."""
+        if self._dist_map is not None:
+            return self._dist_map
+
+        # Compute the center coordinates
+        center_y, center_x = height / 2, width / 2
+
+        # Generate a grid of coordinates
+        y_coords, x_coords = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
+
+        # Compute the Euclidean distance from the center
+        distance_map = torch.sqrt((y_coords - center_y) ** 2 + (x_coords - center_x) ** 2)
+
+        # Normalize distances to range [0, 1]
+        distance_map = distance_map / distance_map.max()
+        
+        self._dist_map = distance_map
+
+        return distance_map
+
+    def forward(self, image):
+        """
+        Args:
+            image (torch.Tensor): Tensor image of shape [C, H, W] with values in [0, 1] or [0, 255].
+        Returns:
+            torch.Tensor: Noisy image.
+        """
+        if not isinstance(image, torch.Tensor):
+            raise TypeError("Image should be a PyTorch tensor.")
+
+        # Ensure the image is a float tensor
+        image = image.float()
+
+        # Get the image dimensions
+        _, _, height, width = image.shape
+
+        # Generate the distance map
+        distance_map = self._get_distance_map(height, width)
+
+        # Create Gaussian noise with standard deviation proportional to distance
+        noise_std = distance_map * self.std_factor
+
+        # Sample Gaussian noise
+        noise = torch.randn_like(image) * noise_std.to(image.device)
+
+        # Add noise to the image
+        noisy_image = image + noise
+
+        # Clamp the result to be in valid range (assuming image in [0, 1])
+        noisy_image = torch.clamp(noisy_image, 0, 1)
+
+        return noisy_image
+
+
 class SmallCNNBackbone(nn.Module):
-    def __init__(self, img_size: int):
+    def __init__(self, img_size: int, input_channels: int = 1):
         super(SmallCNNBackbone, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=1, padding=2)
+        self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=1, padding=2)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
         self.conv4 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
@@ -49,7 +115,7 @@ class SmallCNNBackbone(nn.Module):
         x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv4(x))
         x = F.max_pool2d(x, kernel_size=2, stride=2)
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return x
@@ -64,7 +130,7 @@ class GraspingModel(nn.Module):
                 self.rgb_backbone = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
                 self.rgb_backbone.fc = nn.Identity()  # Remove final classification layer
             elif cfg.rgb_backbone == "smallcnn":
-                self.rgb_backbone = SmallCNNBackbone(cfg.img_size)
+                self.rgb_backbone = SmallCNNBackbone(cfg.img_size, input_channels=3)
             else:
                 raise ValueError(f"Unknown RGB backbone {cfg.rgb_backbone}")
             
@@ -81,7 +147,7 @@ class GraspingModel(nn.Module):
                 self.depth_backbone.fc = nn.Identity()  # Remove final classification layer
                 self.depth_backbone.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
             elif cfg.depth_backbone == "smallcnn":
-                self.depth_backbone = SmallCNNBackbone(cfg.img_size)
+                self.depth_backbone = SmallCNNBackbone(cfg.img_size, input_channels=1)
             else: 
                 raise ValueError(f"Unknown depth backbone {cfg.depth_backbone}")
 
@@ -138,36 +204,43 @@ class GraspingLightningModule(L.LightningModule):
         if isinstance(cfg, dict):
             cfg = OmegaConf.create(cfg)
 
-        if stats is None: 
-            print("Stats not provided, using default values")
-            stats = {
-                'depth': {'mean': torch.tensor(0.8930), 'std': torch.tensor(0.1611)}, 
-                'dx_dy_dz': {'mean': torch.tensor([-0.0386, -0.3643, -0.1164]), 'std': torch.tensor([0.0265, 0.1136, 0.0413])}
-                }
         self.stats = stats
-       
+
         self.model = GraspingModel(cfg)
         self.cfg = cfg
-        self.save_hyperparameters(OmegaConf.to_container(cfg, resolve=True))
+        self.save_hyperparameters({
+            "cfg": OmegaConf.to_container(cfg, resolve=True),
+            "stats": self.stats
+        })
 
-        self.augments = T.Compose([
+        self.augments_rgb = T.Compose([
                 T.ColorJitter(brightness=0.5, contrast=0.15, saturation=0.15, hue=0.15),
                 T.RandomAdjustSharpness(sharpness_factor=0.3),
                 T.GaussianNoise(mean=0, sigma=0.12),
             ])
         
+        self.augments_depth = T.Compose([
+                GaussianNoiseWithDistance(std_factor=0.1),
+            ])
+        
         self._train_sample_is_saved = False
         self._val_sample_is_saved = False
 
+    def on_load_checkpoint(self, checkpoint):
+        loaded_stats = checkpoint["hyper_parameters"].get("stats", {})
+        self.stats = {
+            k: {sk: v for sk, v in sv.items()} for k, sv in loaded_stats.items()
+        }
+        return super().on_load_checkpoint(checkpoint)
+
     def _save_grid(self, batch, label):
         # Save up to 9 images from the batch in a single grid image for visualisation 
-        selected_imgs = batch["rgb"][:min(9, batch["rgb"].shape[0])]
-        selected_imgs = selected_imgs.cpu().numpy()
+        for typ in ["rgb", "depth"]:
+            selected_rgbs = batch[typ][:min(9, batch[typ].shape[0])]
+            selected_rgbs = selected_rgbs.cpu().numpy()
 
-        # print(f"{dt.datetime.now().strftime(r'%Y-%m-%dT%H:%M:%S.%f')} - Saving image {label} {i}")
-        img = create_grid_img(selected_imgs)
-        self.logger.log_image(key=f"input_rgb_"+label, images=[img])
-        # print(f"{dt.datetime.now().strftime(r'%Y-%m-%dT%H:%M:%S.%f')} - Image {label} {i} saved")
+            img = create_grid_img(selected_rgbs)
+            self.logger.log_image(key=f"input_{typ}_"+label, images=[img])
 
     def forward(self, rgb, depth):
         """
@@ -185,7 +258,8 @@ class GraspingLightningModule(L.LightningModule):
         """
         Training step.
         """
-        batch["rgb"] = self.augments(batch["rgb"])
+        batch["rgb"] = self.augments_rgb(batch["rgb"])
+        batch["depth"] = self.augments_depth(batch["depth"])
 
         if not self._train_sample_is_saved:
             self._save_grid(batch, "train")
