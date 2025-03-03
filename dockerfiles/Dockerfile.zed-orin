@@ -1,0 +1,27 @@
+FROM stereolabs/zed:4.2-py-devel-l4t-r35.4
+
+RUN apt update && apt install -y \
+    python3-pip cmake libboost-all-dev &&\
+    rm -rf /var/lib/apt/lists/* 
+
+# This needs to be before ZED SDK installation to link openCV properly
+COPY dockerfiles/requirements-orin.txt /tmp
+RUN pip install -r /tmp/requirements-orin.txt
+
+RUN apt update && apt install -y \
+   build-essential 
+
+RUN apt install -y \
+    git
+
+
+RUN pip install ur_rtde==1.6.0
+
+########################################################################################
+##################################### REPO #############################################
+########################################################################################
+WORKDIR /amiga
+COPY . .
+RUN python3 -m pip install -e .
+
+CMD bash

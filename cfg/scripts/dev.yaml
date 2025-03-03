@@ -7,13 +7,13 @@ robot_zmq:
   async_client: false
 
 cam_zmq:
-  host: localhost
+  host: 10.0.4.5
   port: 5556
   class_name: ZEDCamera
   async_client: true
 
 yolo_weights: resources/models/250218_yolov11s_datav2_mAP50=0.988.pt
-grasp_mdl_ckpt_path: resources/models/250220_grasp_v2_val_loss=0.22.ckpt
+grasp_mdl_ckpt_path: resources/models/250225_grasp_v2.ckpt
 
 
 # Old ings

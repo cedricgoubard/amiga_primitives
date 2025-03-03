@@ -15,8 +15,7 @@ def Dev(cfg: OmegaConf):
     from amiga.vision import KitchenObjectDetector, overlay_results
     from amiga.drivers.cameras import ZEDCamera  # DO NOT REMOVE, used at eval
     from amiga.drivers.amiga import AMIGA  # DO NOT REMOVE, used at eval
-    from amiga.primitives.handover import handover
-    from amiga.primitives.grasp_shelf import grasp_from_shelf
+    from amiga.primitives import handover, grasp_from_shelf, place
     from amiga.models import GraspingLightningModule
 
     # Make camera client
@@ -81,12 +80,21 @@ def Dev(cfg: OmegaConf):
                 path.append(np.array([0.0, -0.4, 0.8]))
                 blend.append(0.25)
             
-            handover(
-                camera, 
-                robot, 
-                position=[0.0, -1.1, 0.7], 
-                initial_path=path, 
-                initial_blend=blend
+            # handover(
+            #     camera, 
+            #     robot, 
+            #     position=[0.0, -1.1, 0.7], 
+            #     initial_path=path, 
+            #     initial_blend=blend
+            #     )
+
+            place(
+                robot=robot,
+                speed="low",
+                start_position=[0.0, -1.1, 0.7],
+                initial_path=path,
+                initial_blend=blend,
+                fall_back_after_place=True
                 )
 
 

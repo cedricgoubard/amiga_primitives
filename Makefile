@@ -31,6 +31,7 @@ run-amiga-listener-pi:
 run-zed:
 	@docker run \
 			--runtime=nvidia \
+			--gpus all \
 			--rm \
 			--name ${project-name}-zed \
 			--privileged \
@@ -41,9 +42,8 @@ run-zed:
 			-v ${current_dir}/resources/.bash_history:/root/.bash_history \
 			-v ${current_dir}/resources/zed/zed_calib/:/usr/local/zed/settings/ \
 			-v ${current_dir}/resources/zed/zed_resources:/usr/local/zed/resources/ \
-			-e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
 			-it \
-			${project-name}-zed:latest bash -c "python -m amiga --zmq --cfg cfg/zed.yaml"
+			${project-name}-zed:latest bash -c "python3 -m amiga --zmq --cfg cfg/zed.yaml"
 
 run-zed-orin:
 	ssh -t amigo_orin "cd cedric/amiga_primitives && make run-zed"
@@ -233,6 +233,9 @@ get-rs-img:
 
 build-zed: .build-base-gpu
 	@docker build -f dockerfiles/Dockerfile.zed -t ${project-name}-zed:latest .
+
+build-zed-orin: .build-base
+	@docker build -f dockerfiles/Dockerfile.zed-orin -t ${project-name}-zed:latest .
 
 build-realsense: .build-base
 	@docker build -f dockerfiles/Dockerfile.realsense -t ${project-name}-rs:latest .

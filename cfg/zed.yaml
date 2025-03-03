@@ -1,6 +1,6 @@
 zmq:
   class_name: ZEDCamera
-  host: localhost
+  host: 10.0.4.5
   port: 5556
   async_client: true
 

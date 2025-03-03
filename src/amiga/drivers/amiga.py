@@ -210,8 +210,13 @@ class AMIGA(ZMQBackendObject):
 
     def _reload_ur_program_if_not_running(self):
         while not self.robot.isConnected():
-            print("Reconnecting to robot")
+            print("Reconnecting UR Control to robot")
             self.robot.reconnect()
+            time.sleep(0.5)
+
+        while not self.r_inter.isConnected():
+            print("Reconnecting UR Receive to robot")
+            self.r_inter.reconnect()
             time.sleep(0.5)
 
         while not self.robot.isProgramRunning():
@@ -220,11 +225,12 @@ class AMIGA(ZMQBackendObject):
             self._free_drive = False
             time.sleep(0.3)
 
-        if not self.robot.isProgramRunning() and self.robot.isConnected():
+        if not self.robot.isProgramRunning() and self.robot.isConnected() and self.r_inter.isConnected():
             self._reload_ur_program_if_not_running()
 
     def _load_named_cfgs(self):
         """Load the named joint configurations from config file."""
+        self._reload_ur_program_if_not_running()
         for name, joints in self.cfg.named_joint_cfgs.items():
             js = []
             for j in joints:
@@ -526,6 +532,28 @@ class AMIGA(ZMQBackendObject):
        
         self.robot.waitPeriod(t_start)
 
+    def move_eef_until_contact(self, direction: np.ndarray):
+        self._reload_ur_program_if_not_running()
+
+        if isinstance(direction, list):
+            direction = np.array(direction)
+        # assert direction.shape == (3,), f"Direction must have 3 elements, got {direction.shape}"
+
+        # Scale direction to unit vector and multiply by current robot speed
+        direction = direction / np.linalg.norm(direction)
+        vel, acc = self._get_eef_speed_values_vel_acc()
+        direction *= vel
+
+        print(f"Direction to move: {direction}, acc {acc}")
+        
+        # moveUntilContact takes a "direction" param which is the direction of the 
+        # detected contact (6D), but the direction of movement is given by xd (3D)
+        self.robot.moveUntilContact(
+            xd=direction,
+            # acceleration=acc
+            )
+        print("Out")
+
     def is_freedrive_enabled(self) -> bool:
         """Check if the robot is in freedrive mode.
 
@@ -619,6 +647,7 @@ class AMIGA(ZMQBackendObject):
             "follow_joint_positions_path": ["path", "final_gripper_position", "wait"],
             "follow_eef_path": ["path", "gripper_position", "wait"],
             "follow_eef_position_path_default_orientation": ["path", "gripper_position", "wait"],
+            "move_eef_until_contact": ["direction"],
             "close_gripper": None,
             "open_gripper": None,
             "get_camera_tf": None,

@@ -6,13 +6,20 @@ authors = [
 ]
 description = "Primitives for the AMIGA/AMIGO robots"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["ur-rtde==1.6.0", "opencv-python>=4.10.0.84,<5", "opencv-contrib-python>=4.10.0.84,<5", "transforms3d", "roboflow>=0.1.1,<0.2"]
+dependencies = [
+  "ur-rtde==1.6.0",
+  "opencv-python>=4.10.0.84,<5",
+  "opencv-contrib-python>=4.10.0.84,<5",
+  "transforms3d",
+  "roboflow>=0.1.1,<0.2",
+  "psutil==7.0.0"
+  ]
 
 [build-system]
 requires = ["hatchling"]
