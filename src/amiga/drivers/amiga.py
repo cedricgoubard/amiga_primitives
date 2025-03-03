@@ -169,6 +169,31 @@ class AMIGA(ZMQBackendObject):
         else:
             raise ValueError("Invalid speed value")
 
+        self._speed = "low"
+
+    def set_speed(self, speed: str):
+        assert speed in ["low", "high"], "Speed must be 'low' or 'high'"
+        self._speed = speed
+
+    def get_speed(self):
+        return self._speed
+    
+    def _get_joint_speed_values_vel_acc(self):
+        if self._speed == "low":
+            return [0.8, 1.0]
+        elif self._speed == "high":
+            return [2.0, 2.0]
+        else:
+            raise ValueError("Invalid speed value")
+        
+    def _get_eef_speed_values_vel_acc(self):
+        if self._speed == "low":
+            return [0.2, 1.0]
+        elif self._speed == "high":
+            return [0.75, 2.0]
+        else:
+            raise ValueError("Invalid speed value")
+
     def _check_required_libraries(self) -> bool:
         ready = True
         try:
