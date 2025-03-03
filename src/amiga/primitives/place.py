@@ -18,13 +18,13 @@ from amiga.utils import save_rgb, save_depth
 
 def place(
         robot: AMIGA,
-        speed: str = "low",
+        dist_from_user: str = "close",
         start_position: np.ndarray = [0.0, -1.1, 0.7],
         initial_path: List[np.ndarray] = None,
         initial_blend: List[float] = None,
         fall_back_after_place: bool = True
         ):
-    assert speed in ["low", "high"], f"Speed {speed} not supported. Choose between 'low' and 'high'."
+    assert dist_from_user in ["close", "far"], f"Distance {dist_from_user} not supported. Choose between 'close' and 'far'."
 
     if initial_path is None: initial_path = []
     if initial_blend is None: initial_blend = []
@@ -37,29 +37,28 @@ def place(
     path.append(np.array(start_position))
     blend.append(0.0)
 
-    robot.set_speed(speed=speed)
-    print("Going to position")
-    print(path)
     robot.follow_eef_position_path_default_orientation(path=path, wait=True, blend=blend)
 
-    print("Moving")
+    if dist_from_user == "close":
+        dir_vec = np.array([0.0, -1.2, -0.7, 0.0, 0.0, 0.0])
+    else:
+        dir_vec = np.array([0.0, -0.5, -2.0, 0.0, 0.0, 0.0])
+
     robot.move_eef_until_contact(
-        direction=np.array([0.0, -1.0, -1.0, 0.0, 0.0, 0.0]),
+        direction=dir_vec,
+        contact_dir=[0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
+        acceleration=1.0
         )
-    print("Contact")
     robot.open_gripper()
+    time.sleep(0.8)
 
     if fall_back_after_place:
-        print("Falling back")
         fall_back_pose = robot.get_observation()["ee_pose_euler"]
         fall_back_pose[1] += 0.3
         fall_back_pose[2] += 0.07
         fall_back_q = robot.get_ik(eef_pose=fall_back_pose)
         
         overlook_q = robot.get_named_joints_cfg(name="overlook")[:6]
-        print(fall_back_q.shape, overlook_q.shape)
         path = np.stack([fall_back_q, overlook_q])
         robot.follow_joint_positions_path(path=path, wait=True, blend=[0.1, 0.0])
-        robot.close_gripper()
-        print("Done")
     

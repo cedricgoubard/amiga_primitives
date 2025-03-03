@@ -544,7 +544,6 @@ class AMIGA(ZMQBackendObject):
         vel, acc = self._get_eef_speed_values_vel_acc()
         direction *= vel
 
-        print(f"Direction to move: {direction}, acc {acc}")
         
         # moveUntilContact takes a "direction" param which is the direction of the 
         # detected contact (6D), but the direction of movement is given by xd (3D)
