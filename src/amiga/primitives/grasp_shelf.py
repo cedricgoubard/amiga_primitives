@@ -142,6 +142,9 @@ def grasp_from_shelf(
     target_xyz = init_xyz + res
     target_xyz[2] += 0.01  # offset in z (upwards)
 
+    if obj_name == "sieve":
+        target_xyz[1] += 0.05
+
     robot.go_to_eef_position_default_orientation(eef_position=target_xyz, wait=True)
     robot.close_gripper()
     time.sleep(0.8)
