@@ -48,6 +48,12 @@ class BaseZMQClient:
         self._socket = self._context.socket(zmq.REQ)
         self._socket.connect(f"tcp://{host}:{port}")
 
+        self.host = host
+        self.port = port
+
+    def __str__(self):
+        return f"{self.__class__.__name__}(host={self.host}, port={self.port})"
+
 
 class SyncZMQClient(BaseZMQClient):
     """A synchronous ZMQ client."""
