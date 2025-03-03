@@ -8,7 +8,7 @@ RUN pip install -r /tmp/requirements.txt
 
 RUN pip install \
     pymodbus==3.6.8 \
-    ur-rtde==1.5.7
+    ur-rtde==1.6.0
 
 WORKDIR /amiga
 COPY . .
