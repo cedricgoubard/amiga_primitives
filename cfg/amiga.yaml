@@ -1,5 +1,5 @@
 zmq:
-  host: localhost
+  host: 10.0.4.1
   port: 5555
   class_name: AMIGA
   async_client: false
