@@ -25,6 +25,8 @@ run-amiga-listener:
 			--ulimit rttime=-1 \
 			${project-name}-amiga:latest bash -c "python -m amiga --zmq --cfg cfg/amiga.yaml"
 
+run-amiga-listener-pi:
+	ssh -t amigo_arm_pi "cd cedric/amiga_primitives && make run-amiga-listener"
 
 run-zed:
 	@docker run \
@@ -43,6 +45,8 @@ run-zed:
 			-it \
 			${project-name}-zed:latest bash -c "python -m amiga --zmq --cfg cfg/zed.yaml"
 
+run-zed-orin:
+	ssh -t amigo_orin "cd cedric/amiga_primitives && make run-zed"
 
 run-zed-obj-det:
 	@docker run \
