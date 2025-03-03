@@ -143,6 +143,7 @@ class ZMQServer:
         self._socket = self._context.socket(zmq.REP)
         self._socket.bind(f"tcp://{host}:{port}")
         self._stop_event = threading.Event()
+        print(f"ZMQ server running on {host}:{port}")
 
     def serve(self):
         """Serve requests."""
