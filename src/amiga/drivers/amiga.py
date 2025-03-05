@@ -533,7 +533,7 @@ class AMIGA(ZMQBackendObject):
 
         # Scale direction to unit vector and multiply by current robot speed
         direction = direction / np.linalg.norm(direction)
-        direction /= 2  
+        direction /= 4 
         vel, acc = self._get_eef_speed_values_vel_acc()
         direction *= vel
 
