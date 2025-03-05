@@ -40,7 +40,7 @@ def place(
     robot.follow_eef_position_path_default_orientation(path=path, wait=True, blend=blend)
 
     if dist_from_user == "close":
-        dir_vec = np.array([0.0, -1.2, -0.7, 0.0, 0.0, 0.0])
+        dir_vec = np.array([0.0, -2.1, -0.7, 0.0, 0.0, 0.0])
     else:
         dir_vec = np.array([0.0, -0.5, -2.0, 0.0, 0.0, 0.0])
 
