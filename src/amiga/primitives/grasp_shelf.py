@@ -56,6 +56,7 @@ def grasp_from_shelf(
 
         # For debug
         save_rgb(rgb, path=join(img_save_path, "latest_rgb.jpg"))
+        # save_rgb(rgb, path=join(img_save_path, dt.datetime.now().strftime('%Y%m%d%H%M%S') + "_rgb.jpg"))
         save_depth(depth, path=join(img_save_path, "latest_depth.jpg"), max=3000)
         if len(objs) > 0: 
             save_rgb(overlay_results(rgb, objs), path=join(img_save_path, "latest_objects.jpg"))
