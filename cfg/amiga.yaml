@@ -17,8 +17,8 @@ cameras:
 named_joint_cfgs:
   overlook:
     - np.pi / 2
-    - -np.pi / 2 - np.pi / 3
-    - np.pi / 2 + np.pi / 6
+    - -np.pi / 2 - np.pi / 3 - np.pi / 8
+    - np.pi / 2 + np.pi / 6 + np.pi / 8
     - np.pi / 4
     - np.pi / 2
     - -2.3562 + np.pi
