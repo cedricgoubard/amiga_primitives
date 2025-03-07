@@ -516,7 +516,7 @@ class AMIGA(ZMQBackendObject):
 
     def move_eef_until_contact(
         self, direction: np.ndarray, contact_dir: np.ndarray = None, 
-        acceleration: float = 1.0
+        acceleration: float = 1.0, speed_factor: float = 0.25
         ):
         self._reload_ur_program_if_not_running()
 
@@ -533,7 +533,7 @@ class AMIGA(ZMQBackendObject):
 
         # Scale direction to unit vector and multiply by current robot speed
         direction = direction / np.linalg.norm(direction)
-        direction /= 4 
+        direction *= speed_factor
         vel, acc = self._get_eef_speed_values_vel_acc()
         direction *= vel
 
@@ -639,7 +639,7 @@ class AMIGA(ZMQBackendObject):
             "follow_joint_positions_path": ["path", "final_gripper_position", "wait"],
             "follow_eef_path": ["path", "gripper_position", "wait"],
             "follow_eef_position_path_default_orientation": ["path", "gripper_position", "wait"],
-            "move_eef_until_contact": ["direction", "contact_dir", "acceleration"],
+            "move_eef_until_contact": ["direction", "contact_dir", "acceleration", "speed_factor"],
             "close_gripper": None,
             "open_gripper": None,
             "get_camera_tf": None,
