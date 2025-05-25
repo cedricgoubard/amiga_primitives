@@ -16,7 +16,8 @@ Features:
 - **Modular components** embedded in [Docker](https://docs.docker.com/get-started/docker-overview/) images, using [ZMQ](https://zeromq.org/) for communication between modules. 
 - **Imitation learning pipeline**: data collection, training, and evaluation.
 
-> :warning: Some aspects of the code are specific to the experimental setup. This repo will require adjustments to be used if you do not have access to our robots. Some parts could still be useful for other setups, such as the Dockerfiles, the ZMQ communication classes, or the imitation learning pipeline.
+> [!IMPORTANT] 
+> Some aspects of the code are specific to the experimental setup. This repo will require adjustments to be used if you do not have access to our robots. Some parts could still be useful for other setups, such as the Dockerfiles, the ZMQ communication classes, or the imitation learning pipeline.
 
 
 ## Installation
